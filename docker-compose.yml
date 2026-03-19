@@ -13,6 +13,7 @@ services:
     volumes:
       - open-webui:/app/backend/data
       - open-webui-ollama:/root/.ollama
+      - ./models:/models
     devices:
       - nvidia.com/gpu=all
     depends_on:
