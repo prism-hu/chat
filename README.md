@@ -34,7 +34,7 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-8x13b -f /models/sip-jmed-8x13b.Modelfile
+docker exec open-webui ollama create sip-jmed-8x13b-q5 -f /models/sip-jmed-8x13b-q5.Modelfile
 ```
 
 #### Q8_0 (~78GB)
