@@ -25,6 +25,18 @@ docker exec open-webui ollama create <name> -f /models/<name>.Modelfile
 
 量子化:  [hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF](https://huggingface.co/hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF)
 
+#### BF16 (~146GB)
+
+```
+hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
+  SIP-jmed-llm-3-8x13b-AC-32k-instruct-BF16.gguf \
+  --local-dir ./models
+```
+
+```
+docker exec open-webui ollama create sip-jmed-8x13b -f /models/sip-jmed-8x13b.Modelfile
+```
+
 #### Q5_K_M (~36GB)
 
 ```
