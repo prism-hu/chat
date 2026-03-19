@@ -1,0 +1,38 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:ollama
+    container_name: open-webui
+    environment:
+      - DEFAULT_LOCALE=ja-JP
+      - WEBUI_URL=https://chat.prism-hu.org
+      - ENABLE_FOLLOW_UP_GENERATION=false
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=sk-litellm-master-key
+    ports:
+      - "8080:8080"
+    volumes:
+      - open-webui:/app/backend/data
+      - open-webui-ollama:/root/.ollama
+    devices:
+      - nvidia.com/gpu=all
+    depends_on:
+      - litellm
+    restart: always
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    ports:
+      - "4000:4000"
+    command: ["--config", "/app/config.yaml"]
+    environment:
+      - LITELLM_MASTER_KEY=sk-litellm-master-key
+      - DISABLE_SPEND_LOGS=True
+      - LITELLM_MODE=DEV
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml
+    restart: always
+
+volumes:
+  open-webui:
+  open-webui-ollama:
