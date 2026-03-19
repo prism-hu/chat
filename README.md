@@ -48,3 +48,29 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 ```
 docker exec open-webui ollama create sip-jmed-8x13b-q8 -f /models/sip-jmed-8x13b-q8.Modelfile
 ```
+
+### [hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF](https://huggingface.co/hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF)
+
+#### BF16 (~27GB)
+
+```
+hf download hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF \
+  SIP-jmed-llm-3-13b-OP-32k-R0.1-BF16.gguf \
+  --local-dir ./models
+```
+
+```
+docker exec open-webui ollama create sip-jmed-13b -f /models/sip-jmed-13b.Modelfile
+```
+
+#### Q8_0 (~15GB)
+
+```
+hf download hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF \
+  SIP-jmed-llm-3-13b-OP-32k-R0.1-Q8_0.gguf \
+  --local-dir ./models
+```
+
+```
+docker exec open-webui ollama create sip-jmed-13b-q8 -f /models/sip-jmed-13b-q8.Modelfile
+```
