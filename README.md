@@ -65,7 +65,12 @@ docker exec open-webui ollama create sip-jmed-8x13b-q8 -f /models/sip-jmed-8x13b
 
 日英バイリンガル 21B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
 
-Ollama が HuggingFace から直接ダウンロード・変換する（MXFP4 量子化を保持）。
+safetensors からの直接変換（MXFP4 量子化を保持）。
+
+```
+hf download tokyotech-llm/GPT-OSS-Swallow-20B-RL-v0.1 \
+  --local-dir ./models/GPT-OSS-Swallow-20B-RL-v0.1
+```
 
 ```
 docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-swallow-20b-rl.Modelfile
@@ -74,6 +79,11 @@ docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-s
 ### [tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1)
 
 日英バイリンガル 120B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
+
+```
+hf download tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1 \
+  --local-dir ./models/GPT-OSS-Swallow-120B-RL-v0.1
+```
 
 ```
 docker exec open-webui ollama create gpt-oss-swallow-120b-rl -f /models/gpt-oss-swallow-120b-rl.Modelfile
