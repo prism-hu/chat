@@ -2,6 +2,12 @@
 
 Visit https://chat.prism-hu.org
 
+## 環境
+
+NVIDIA DGX Spark (128GB 統合メモリ)
+
+## スタック
+
 - OpenWebUI
 - Ollama
 - LiteLLM
