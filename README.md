@@ -79,6 +79,24 @@ hf download mmnga-o/GPT-OSS-Swallow-20B-RL-v0.1-gguf \
 docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-swallow-20b-rl.Modelfile
 ```
 
+### [tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1)
+
+日英バイリンガル 120B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
+
+GGUF: [mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf](https://huggingface.co/mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf)
+
+#### MXFP4_MOE (~63GB, 6分割)
+
+```
+hf download mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf \
+  --include "MXFP4_MOE/*" \
+  --local-dir ./models
+```
+
+```
+docker exec open-webui ollama create gpt-oss-swallow-120b-rl -f /models/gpt-oss-swallow-120b-rl.Modelfile
+```
+
 ### [hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF](https://huggingface.co/hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF)
 
 #### BF16 (~27GB)

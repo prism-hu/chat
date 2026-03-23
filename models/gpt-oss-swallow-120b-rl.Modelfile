@@ -1,0 +1,6 @@
+FROM /models/MXFP4_MOE/GPT-OSS-Swallow-120B-RL-v0.1-MXFP4_MOE-00001-of-00006.gguf
+
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER num_ctx 32768
