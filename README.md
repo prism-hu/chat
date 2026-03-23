@@ -65,15 +65,7 @@ docker exec open-webui ollama create sip-jmed-8x13b-q8 -f /models/sip-jmed-8x13b
 
 日英バイリンガル 21B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
 
-GGUF: [mmnga-o/GPT-OSS-Swallow-20B-RL-v0.1-gguf](https://huggingface.co/mmnga-o/GPT-OSS-Swallow-20B-RL-v0.1-gguf)
-
-#### MXFP4_MOE (~24GB)
-
-```
-hf download mmnga-o/GPT-OSS-Swallow-20B-RL-v0.1-gguf \
-  GPT-OSS-Swallow-20B-RL-v0.1-MXFP4_MOE.gguf \
-  --local-dir ./models
-```
+Ollama が HuggingFace から直接ダウンロード・変換する（MXFP4 量子化を保持）。
 
 ```
 docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-swallow-20b-rl.Modelfile
@@ -82,16 +74,6 @@ docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-s
 ### [tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1)
 
 日英バイリンガル 120B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
-
-GGUF: [mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf](https://huggingface.co/mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf)
-
-#### MXFP4_MOE (~63GB, 6分割)
-
-```
-hf download mmnga-o/GPT-OSS-Swallow-120B-RL-v0.1-gguf \
-  --include "MXFP4_MOE/*" \
-  --local-dir ./models
-```
 
 ```
 docker exec open-webui ollama create gpt-oss-swallow-120b-rl -f /models/gpt-oss-swallow-120b-rl.Modelfile
