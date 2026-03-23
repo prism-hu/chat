@@ -67,19 +67,21 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 docker exec open-webui ollama create sip-jmed-8x13b-q8 -f /models/sip-jmed-8x13b-q8.Modelfile
 ```
 
-### [tokyotech-llm/GPT-OSS-Swallow-20B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-20B-RL-v0.1)
+### [tokyotech-llm/GPT-OSS-Swallow-20B-SFT-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-20B-SFT-v0.1)
 
-日英バイリンガル 21B パラメータモデル（GPT-OSS ベース、RLVR 学習済み）。コンテキスト長 32K。
+日英バイリンガル 21B パラメータモデル（GPT-OSS ベース、SFT 学習済み）。コンテキスト長 32K。
 
-safetensors からの直接変換（MXFP4 量子化を保持）。
+量子化: [sashisuseso/GPT-OSS-Swallow-20B-SFT-v0.1-MXFP4_MOE-GGUF](https://huggingface.co/sashisuseso/GPT-OSS-Swallow-20B-SFT-v0.1-MXFP4_MOE-GGUF)
 
-```
-hf download tokyotech-llm/GPT-OSS-Swallow-20B-RL-v0.1 \
-  --local-dir ./models/GPT-OSS-Swallow-20B-RL-v0.1
-```
+#### MXFP4_MOE (~12GB)
 
 ```
-docker exec open-webui ollama create gpt-oss-swallow-20b-rl -f /models/gpt-oss-swallow-20b-rl.Modelfile
+hf download sashisuseso/GPT-OSS-Swallow-20B-SFT-v0.1-MXFP4_MOE-GGUF \
+  --local-dir ./models/GPT-OSS-Swallow-20B-SFT-v0.1-MXFP4_MOE-GGUF
+```
+
+```
+docker exec open-webui ollama create gpt-oss-swallow-20b-sft -f /models/gpt-oss-swallow-20b-sft.Modelfile
 ```
 
 ### [tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1)
