@@ -25,13 +25,13 @@ services:
     container_name: litellm
     ports:
       - "4000:4000"
-    command: ["--config", "/app/config.yaml"]
+    command: ["--config", "/app/litellm/config.yaml"]
     environment:
       - LITELLM_MASTER_KEY=sk-litellm-master-key
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
-      - ./litellm-config.yaml:/app/config.yaml
+      - ./litellm:/app/litellm
     restart: always
 
 volumes:
