@@ -3,6 +3,7 @@ services:
     image: ghcr.io/open-webui/open-webui:ollama
     container_name: open-webui
     environment:
+      - OLLAMA_HOST=0.0.0.0
       - DEFAULT_LOCALE=ja-JP
       - WEBUI_URL=https://chat.prism-hu.org
       - ENABLE_FOLLOW_UP_GENERATION=false
