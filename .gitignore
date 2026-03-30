@@ -2,4 +2,4 @@ models/*/
 models/*.gguf
 models/*.bin
 models/.cache/
-litellm/config.yaml
+.env

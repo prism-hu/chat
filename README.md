@@ -13,6 +13,57 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 - LiteLLM
 
 
+## LiteLLM API (外部アクセス)
+
+Tailscale経由でOpenAI互換APIとして利用可能。
+
+**エンドポイント:** `http://<HOST>:4000/v1`
+**APIキー:** `.env` の `LITELLM_MASTER_KEY`
+
+### 利用可能なモデル
+
+| model_name | 内容 |
+|---|---|
+| `claude-opus-4-6` | Claude Opus 4.6 |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| `gpt-oss-20b` | GPT-OSS 20B |
+| `gpt-oss-120b` | GPT-OSS 120B |
+| `sip-jmed-13b` | SIP-jmed 13B |
+| `sip-jmed-8x13b-q8` | SIP-jmed 8x13B Q8 |
+| `nemotron-3-nano` | Nemotron-3 Nano |
+| `nemotron-3-super` | Nemotron-3 Super |
+| `qwen3.5-9b` | Qwen3.5 9B |
+| `qwen3.5-27b` | Qwen3.5 27B |
+
+### 使い方
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://<HOST>:4000/v1",
+    api_key="<LITELLM_MASTER_KEY>",
+)
+response = client.chat.completions.create(
+    model="gpt-oss-20b",
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+```
+
+```bash
+curl http://<HOST>:4000/v1/chat/completions \
+  -H "Authorization: Bearer <LITELLM_MASTER_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-oss-20b", "messages": [{"role": "user", "content": "こんにちは"}]}'
+```
+
+モデル一覧の確認:
+
+```bash
+curl http://<HOST>:4000/v1/models \
+  -H "Authorization: Bearer <LITELLM_MASTER_KEY>"
+```
+
 ## Models
 
 ### モデルの追加方法

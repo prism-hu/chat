@@ -1,0 +1,53 @@
+model_list:
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: ${CLAUDE_API_KEY}
+
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: ${CLAUDE_API_KEY}
+
+  # --- Ollama local models ---
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: ollama/gpt-oss:20b
+      api_base: http://open-webui:11434
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: ollama/gpt-oss:120b
+      api_base: http://open-webui:11434
+
+  - model_name: sip-jmed-13b
+    litellm_params:
+      model: ollama/sip-jmed-13b:latest
+      api_base: http://open-webui:11434
+
+  - model_name: sip-jmed-8x13b-q8
+    litellm_params:
+      model: ollama/sip-jmed-8x13b-q8:latest
+      api_base: http://open-webui:11434
+
+  - model_name: nemotron-3-nano
+    litellm_params:
+      model: ollama/nemotron-3-nano:latest
+      api_base: http://open-webui:11434
+
+  - model_name: nemotron-3-super
+    litellm_params:
+      model: ollama/nemotron-3-super:latest
+      api_base: http://open-webui:11434
+
+  - model_name: qwen3.5-9b
+    litellm_params:
+      model: ollama/qwen3.5:9b
+      api_base: http://open-webui:11434
+
+  - model_name: qwen3.5-27b
+    litellm_params:
+      model: ollama/qwen3.5:27b
+      api_base: http://open-webui:11434
+
+
