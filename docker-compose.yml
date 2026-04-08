@@ -1,9 +1,9 @@
 services:
   open-webui:
-    image: ghcr.io/open-webui/open-webui:ollama
+    image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     environment:
-      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - DEFAULT_LOCALE=ja-JP
       - WEBUI_URL=https://chat.prism-hu.org
       - ENABLE_FOLLOW_UP_GENERATION=false
@@ -13,10 +13,9 @@ services:
       - "8080:8080"
     volumes:
       - open-webui:/app/backend/data
-      - open-webui-ollama:/root/.ollama
       - ./models:/models
-    devices:
-      - nvidia.com/gpu=all
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - litellm
     restart: always
@@ -37,4 +36,3 @@ services:
 
 volumes:
   open-webui:
-  open-webui-ollama:
