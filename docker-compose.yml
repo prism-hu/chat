@@ -11,6 +11,7 @@ services:
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
     ports:
       - "8080:8080"
+      - "11434:11434"
     volumes:
       - open-webui:/app/backend/data
       - ./models:/models
@@ -28,6 +29,7 @@ services:
     command: ["--config", "/app/litellm/config.yaml"]
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN}
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
