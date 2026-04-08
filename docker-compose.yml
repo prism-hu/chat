@@ -6,6 +6,7 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - DEFAULT_LOCALE=ja-JP
       - WEBUI_URL=https://chat.prism-hu.org
+      - WEBUI_SHOW_UPDATE_NOTIFICATION=false
       - ENABLE_FOLLOW_UP_GENERATION=false
       - OPENAI_API_BASE_URL=http://litellm:4000/v1
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
