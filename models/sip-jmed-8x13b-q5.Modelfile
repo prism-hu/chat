@@ -1,4 +1,4 @@
-FROM /models/SIP-jmed-llm-3-8x13b-AC-32k-instruct-Q5_K_M.gguf
+FROM models/SIP-jmed-llm-3-8x13b-AC-32k-instruct-Q5_K_M.gguf
 
 TEMPLATE """{{ if .System }}<|im_start|>system
 {{ .System }}<|im_end|>

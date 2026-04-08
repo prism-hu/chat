@@ -1,1 +1,1 @@
-FROM /models/SIP-jmed-llm-3-13b-OP-32k-R0.1-BF16.gguf
+FROM models/SIP-jmed-llm-3-13b-OP-32k-R0.1-BF16.gguf

@@ -1,4 +1,4 @@
-FROM /models/GPT-OSS-Swallow-20B-RL-v0.1
+FROM models/GPT-OSS-Swallow-20B-RL-v0.1
 
 PARAMETER temperature 0.6
 PARAMETER top_p 0.95

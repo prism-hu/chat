@@ -9,7 +9,7 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 ## スタック
 
 - OpenWebUI
-- Ollama
+- Ollama (ホスト実行)
 - LiteLLM
 
 
@@ -71,11 +71,11 @@ curl http://<HOST>:4000/v1/models \
 前提: `pip install huggingface-hub`
 
 1. GGUF ファイルを `./models/` にダウンロード (`hf download`)
-2. `models/<name>.Modelfile` を作成 (`FROM /models/<gguf-file>`)
+2. `models/<name>.Modelfile` を作成 (`FROM models/<gguf-file>`)
 3. Ollama に取り込み:
 
 ```
-docker exec open-webui ollama create <name> -f /models/<name>.Modelfile
+ollama create <name> -f models/<name>.Modelfile
 ```
 
 ### [SIP-med-LLM/SIP-jmed-llm-3-8x13b-AC-32k-instruct](https://huggingface.co/SIP-med-LLM/SIP-jmed-llm-3-8x13b-AC-32k-instruct)
@@ -91,7 +91,7 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-8x13b -f /models/sip-jmed-8x13b.Modelfile
+ollama create sip-jmed-8x13b -f models/sip-jmed-8x13b.Modelfile
 ```
 
 #### Q5_K_M (~36GB)
@@ -103,7 +103,7 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-8x13b-q5 -f /models/sip-jmed-8x13b-q5.Modelfile
+ollama create sip-jmed-8x13b-q5 -f models/sip-jmed-8x13b-q5.Modelfile
 ```
 
 #### Q8_0 (~78GB)
@@ -115,7 +115,7 @@ hf download hiratagoh/SIP-jmed-llm-3-8x13b-AC-32k-instruct-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-8x13b-q8 -f /models/sip-jmed-8x13b-q8.Modelfile
+ollama create sip-jmed-8x13b-q8 -f models/sip-jmed-8x13b-q8.Modelfile
 ```
 
 ### [tokyotech-llm/GPT-OSS-Swallow-20B-SFT-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-20B-SFT-v0.1)
@@ -132,7 +132,7 @@ hf download sashisuseso/GPT-OSS-Swallow-20B-SFT-v0.1-MXFP4_MOE-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create gpt-oss-swallow-20b-sft -f /models/gpt-oss-swallow-20b-sft.Modelfile
+ollama create gpt-oss-swallow-20b-sft -f models/gpt-oss-swallow-20b-sft.Modelfile
 ```
 
 ### [tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1](https://huggingface.co/tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1)
@@ -145,7 +145,7 @@ hf download tokyotech-llm/GPT-OSS-Swallow-120B-RL-v0.1 \
 ```
 
 ```
-docker exec open-webui ollama create gpt-oss-swallow-120b-rl -f /models/gpt-oss-swallow-120b-rl.Modelfile
+ollama create gpt-oss-swallow-120b-rl -f models/gpt-oss-swallow-120b-rl.Modelfile
 ```
 
 ### [hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF](https://huggingface.co/hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF)
@@ -159,7 +159,7 @@ hf download hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-13b -f /models/sip-jmed-13b.Modelfile
+ollama create sip-jmed-13b -f models/sip-jmed-13b.Modelfile
 ```
 
 #### Q8_0 (~15GB)
@@ -171,5 +171,5 @@ hf download hiratagoh/SIP-jmed-llm-3-13b-OP-32k-R0.1-GGUF \
 ```
 
 ```
-docker exec open-webui ollama create sip-jmed-13b-q8 -f /models/sip-jmed-13b-q8.Modelfile
+ollama create sip-jmed-13b-q8 -f models/sip-jmed-13b-q8.Modelfile
 ```
