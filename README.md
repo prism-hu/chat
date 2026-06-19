@@ -12,6 +12,24 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 - Ollama (ホスト実行)
 - LiteLLM
 
+## Ollama 設定
+
+Ollama はホストで動作し、Docker コンテナからは `host.docker.internal:11434` 経由でアクセスする。
+
+セキュリティのため Ollama は Docker ブリッジ IP (`172.28.0.1`) にのみバインドする。
+`/etc/systemd/system/ollama.service.d/override.conf` を作成:
+
+```ini
+[Service]
+Environment="OLLAMA_HOST=172.28.0.1"
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+Docker ネットワーク (`chat_default`) のサブネットは `docker-compose.yml` で `172.28.0.0/16` に固定済み。
+
 
 ## LiteLLM API (外部アクセス)
 
