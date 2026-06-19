@@ -3,3 +3,8 @@ models/*.gguf
 models/*.bin
 models/.cache/
 .env
+.venv/
+
+# Large build artifacts (docker image tarballs etc.) — keep only the README
+artifacts/*
+!artifacts/README.md

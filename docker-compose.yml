@@ -35,6 +35,37 @@ services:
       - ./litellm:/app/litellm
     restart: always
 
+  # Qwen3.5-122B-A10B (INT4+FP8 hybrid, MTP-2) served by vLLM, optimized for
+  # the DGX Spark (SM121). See vendor/qwen35-spark (git submodule) and README.
+  # Requires a one-time host bootstrap (install.sh Steps 0-3) — see README.
+  vllm-qwen35:
+    # Pulled from GHCR (built on the DGX Spark, pushed to prism-hu). Rebuild only
+    # if needed: vendor/qwen35-spark/install.sh, then docker push (see docs).
+    image: ${VLLM_QWEN35_IMAGE:-ghcr.io/prism-hu/vllm-qwen35-v2:latest}
+    pull_policy: missing
+    container_name: vllm-qwen35
+    ipc: host
+    volumes:
+      - ${MODELS_DIR:-./models}:/models
+    command:
+      - serve
+      - ${QWEN_MODEL_PATH:-/models/qwen35-122b-hybrid-int4fp8}
+      - --served-model-name=qwen
+      - --port=8000
+      - --max-model-len=262144
+      - --gpu-memory-utilization=0.85
+      - --reasoning-parser=qwen3
+      - --attention-backend=FLASHINFER
+      - '--speculative-config={"method":"mtp","num_speculative_tokens":2}'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: always
+
 volumes:
   open-webui:
 

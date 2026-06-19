@@ -11,6 +11,7 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 - OpenWebUI
 - Ollama (ホスト実行)
 - LiteLLM
+- vLLM (Qwen3.5-122B, DGX Spark SM121 最適化 / `vendor/qwen35-spark` submodule)
 
 ## Ollama 設定
 
@@ -40,10 +41,17 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 
 ### 利用可能なモデル
 
+すべて LiteLLM (`:4000`) 経由でアクセスするが、バックエンドで3系統に分かれる。
+
+**LiteLLM（外部 API: Claude / Anthropic）**
 | model_name | 内容 |
 |---|---|
 | `claude-opus-4-6` | Claude Opus 4.6 |
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 |
+
+**Ollama（ホスト実行）**
+| model_name | 内容 |
+|---|---|
 | `gpt-oss-20b` | GPT-OSS 20B |
 | `gpt-oss-120b` | GPT-OSS 120B |
 | `sip-jmed-13b` | SIP-jmed 13B |
@@ -52,6 +60,11 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 | `nemotron-3-super` | Nemotron-3 Super |
 | `qwen3.5-9b` | Qwen3.5 9B |
 | `qwen3.5-27b` | Qwen3.5 27B |
+
+**カスタム vLLM（自前ビルド / SM121）** — 詳細は [docs/qwen35-vllm.md](docs/qwen35-vllm.md)
+| model_name | 内容 |
+|---|---|
+| `qwen3.5-122b` | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s） |
 
 ### 使い方
 
@@ -81,6 +94,17 @@ curl http://<HOST>:4000/v1/chat/completions \
 curl http://<HOST>:4000/v1/models \
   -H "Authorization: Bearer <LITELLM_MASTER_KEY>"
 ```
+
+## Qwen3.5-122B カスタム vLLM
+
+`qwen3.5-122b` は SM121 向けに**自前ビルドした vLLM イメージ**（`ghcr.io/prism-hu/vllm-qwen35-v2`、
+GHCR から pull）で配信している。albond のフォーク（`vendor/qwen35-spark` submodule）をベースに
+INT4+FP8 hybrid / MTP-2 / FlashInfer で最適化（~52 tok/s）。
+
+**セットアップ・動作チェック・GHCR 配布・バージョン経緯・トラブルシュートは
+[docs/qwen35-vllm.md](docs/qwen35-vllm.md) に集約。**
+
+submodule 取得: `git submodule update --init --recursive`
 
 ## Models
 

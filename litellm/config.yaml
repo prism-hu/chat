@@ -50,5 +50,12 @@ model_list:
       model: ollama/qwen3.5:27b
       api_base: http://host.docker.internal:11434
 
+  # --- vLLM (DGX Spark SM121), served by the vllm-qwen35 compose service ---
+  - model_name: qwen3.5-122b
+    litellm_params:
+      model: openai/qwen
+      api_base: http://vllm-qwen35:8000/v1
+      api_key: dummy
+
 litellm_settings:
   drop_params: true
