@@ -41,30 +41,18 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 
 ### 利用可能なモデル
 
-すべて LiteLLM (`:4000`) 経由でアクセスするが、バックエンドで3系統に分かれる。
+OpenWebUI からは2系統が見える。**重複を避けるため、Ollama モデルは OpenWebUI が Ollama 直結
+（`OLLAMA_BASE_URL`）で出し、LiteLLM には登録しない**（LiteLLM に入れると同じモデルが UI に二重表示される）。
 
-**LiteLLM（外部 API: Claude / Anthropic）**
-| model_name | 内容 |
-|---|---|
-| `claude-opus-4-6` | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | Claude Sonnet 4.6 |
+**LiteLLM (`:4000`) 経由 — 外部 API でも利用可**
+| model_name | バックエンド | 内容 |
+|---|---|---|
+| `claude-opus-4-6` | Anthropic API | Claude Opus 4.6 |
+| `claude-sonnet-4-6` | Anthropic API | Claude Sonnet 4.6 |
+| `qwen3.5-122b-custom` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
 
-**Ollama（ホスト実行）**
-| model_name | 内容 |
-|---|---|
-| `gpt-oss-20b` | GPT-OSS 20B |
-| `gpt-oss-120b` | GPT-OSS 120B |
-| `sip-jmed-13b` | SIP-jmed 13B |
-| `sip-jmed-8x13b-q8` | SIP-jmed 8x13B Q8 |
-| `nemotron-3-nano` | Nemotron-3 Nano |
-| `nemotron-3-super` | Nemotron-3 Super |
-| `qwen3.5-9b` | Qwen3.5 9B |
-| `qwen3.5-27b` | Qwen3.5 27B |
-
-**カスタム vLLM（自前ビルド / SM121）** — 詳細は [docs/qwen35-vllm.md](docs/qwen35-vllm.md)
-| model_name | 内容 |
-|---|---|
-| `qwen3.5-122b` | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s） |
+**Ollama（ホスト実行）— OpenWebUI 直結。`:4000` 外部 API には出ない**
+`gpt-oss-20b` / `gpt-oss-120b` / `sip-jmed-13b` / `sip-jmed-8x13b-q8` / `nemotron-3-nano` / `nemotron-3-super` / `qwen3.5-9b` / `qwen3.5-27b`
 
 ### 使い方
 

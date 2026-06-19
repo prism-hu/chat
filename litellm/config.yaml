@@ -9,49 +9,12 @@ model_list:
       model: anthropic/claude-sonnet-4-6
       api_key: os.environ/CLAUDE_OAUTH_TOKEN
 
-  # --- Ollama local models ---
-  - model_name: gpt-oss-20b
-    litellm_params:
-      model: ollama/gpt-oss:20b
-      api_base: http://host.docker.internal:11434
-
-  - model_name: gpt-oss-120b
-    litellm_params:
-      model: ollama/gpt-oss:120b
-      api_base: http://host.docker.internal:11434
-
-  - model_name: sip-jmed-13b
-    litellm_params:
-      model: ollama/sip-jmed-13b:latest
-      api_base: http://host.docker.internal:11434
-
-  - model_name: sip-jmed-8x13b-q8
-    litellm_params:
-      model: ollama/sip-jmed-8x13b-q8:latest
-      api_base: http://host.docker.internal:11434
-
-  - model_name: nemotron-3-nano
-    litellm_params:
-      model: ollama/nemotron-3-nano:latest
-      api_base: http://host.docker.internal:11434
-
-  - model_name: nemotron-3-super
-    litellm_params:
-      model: ollama/nemotron-3-super:latest
-      api_base: http://host.docker.internal:11434
-
-  - model_name: qwen3.5-9b
-    litellm_params:
-      model: ollama/qwen3.5:9b
-      api_base: http://host.docker.internal:11434
-
-  - model_name: qwen3.5-27b
-    litellm_params:
-      model: ollama/qwen3.5:27b
-      api_base: http://host.docker.internal:11434
-
-  # --- vLLM (DGX Spark SM121), served by the vllm-qwen35 compose service ---
-  - model_name: qwen3.5-122b
+  # --- vLLM custom build (DGX Spark SM121), served by the vllm-qwen35 service ---
+  # NOTE: Ollama models are intentionally NOT registered here — OpenWebUI talks to
+  # Ollama directly (OLLAMA_BASE_URL), so listing them in LiteLLM too would show
+  # each model twice in the UI. Trade-off: the external :4000 API now exposes only
+  # Claude + this custom vLLM (not the Ollama models).
+  - model_name: qwen3.5-122b-custom
     litellm_params:
       model: openai/qwen
       api_base: http://vllm-qwen35:8000/v1
