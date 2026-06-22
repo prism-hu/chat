@@ -3,13 +3,14 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     environment:
+      - TZ=${TZ:-Asia/Tokyo}
       - OLLAMA_BASE_URL=http://172.28.0.1:11434
       - DEFAULT_LOCALE=ja-JP
       - WEBUI_URL=https://chat.prism-hu.org
       - WEBUI_SHOW_UPDATE_NOTIFICATION=false
       - ENABLE_FOLLOW_UP_GENERATION=false
       - OPENAI_API_BASE_URL=http://litellm:4000/v1
-      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
     ports:
       - "8080:8080"
     volumes:
@@ -27,17 +28,18 @@ services:
       - "4000:4000"
     command: ["--config", "/app/litellm/config.yaml"]
     environment:
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN}
+      - TZ=${TZ:-Asia/Tokyo}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
+      - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN:?Set CLAUDE_OAUTH_TOKEN in .env (see .env.example)}
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
       - ./litellm:/app/litellm
     restart: always
 
-  # Qwen3.5-122B-A10B (INT4+FP8 hybrid, MTP-2) served by vLLM, optimized for
-  # the DGX Spark (SM121). See vendor/qwen35-spark (git submodule) and README.
-  # Requires a one-time host bootstrap (install.sh Steps 0-3) — see README.
+  # Qwen3.5-122B-A10B (INT4+FP8 hybrid, MTP-2) served by vLLM, optimized for the
+  # DGX Spark (SM121). Image pulled from GHCR; model prepared on host via
+  # scripts/fetch-model.sh. Build/versions/troubleshooting: docs/qwen35-vllm.md.
   vllm-qwen35:
     # Pulled from GHCR (built on the DGX Spark, pushed to prism-hu). Rebuild only
     # if needed: vendor/qwen35-spark/install.sh, then docker push (see docs).
@@ -45,6 +47,10 @@ services:
     pull_policy: missing
     container_name: vllm-qwen35
     ipc: host
+    # TZ takes effect on the NEXT vllm restart (don't recreate just for this — it
+    # reloads the 122B model). Only affects log timestamps; inference is unaffected.
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
     volumes:
       - ${MODELS_DIR:-./models}:/models
     command:
@@ -58,6 +64,10 @@ services:
       - --enable-auto-tool-choice
       - --tool-call-parser=qwen3_xml
       - --generation-config=auto
+      # Qwen3.5 thinking-mode recommended sampling (HF model card). Merges over the
+      # checkpoint's generation_config.json (which ships temp=0.6) as server-side
+      # defaults; clients can still override per-request. Applies after next restart.
+      - '--override-generation-config={"temperature":1.0,"top_p":0.95,"top_k":20,"presence_penalty":1.5}'
       - --attention-backend=FLASHINFER
       - '--speculative-config={"method":"mtp","num_speculative_tokens":2}'
     deploy:
@@ -69,8 +79,66 @@ services:
               capabilities: [gpu]
     restart: always
 
+  # Hermes Agent (Nous Research) — self-hosted agent with persistent memory and
+  # learned skills, backed by the local Qwen3.5-122B vLLM service (direct, no API
+  # key). Serves the web dashboard (UI for config / sessions / embedded chat) on
+  # :9119, protected by HTTP Basic auth (the dashboard refuses non-loopback binds
+  # unless an auth provider is registered — the "basic" plugin is enabled inside
+  # the config). Creds come from .env (NOT the config). config.yaml + memory /
+  # skills / sessions ALL live in the hermes-data volume (Hermes self-manages and
+  # chowns config.yaml to its own uid, so it is NOT bind-mounted from the repo —
+  # see hermes/config.yaml.example for the seed). Reaches vLLM in-network as
+  # vllm-qwen35:8000. CLI use: `docker exec -it hermes hermes chat`.
+  hermes:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:latest}
+    pull_policy: missing
+    container_name: hermes
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"]
+    ports:
+      - "9119:9119"
+      - "127.0.0.1:8646:8646"
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:?Set HERMES_DASHBOARD_BASIC_AUTH_USERNAME in .env (see .env.example)}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:?Set HERMES_DASHBOARD_BASIC_AUTH_PASSWORD in .env (see .env.example)}
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?Set HERMES_DASHBOARD_BASIC_AUTH_SECRET in .env (see .env.example)}
+      # Platform creds, injected from .env (NOT /opt/data/.env). Empty-defaulted so
+      # `compose up` still starts when a platform is left disabled in config.yaml;
+      # whether a platform is active is decided by platforms.*.enabled there.
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
+      - DISCORD_HOME_CHANNEL=${DISCORD_HOME_CHANNEL:-}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:-}
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:-}
+      - LINE_PUBLIC_URL=${LINE_PUBLIC_URL:-}
+      - LINE_ALLOW_ALL_USERS=${LINE_ALLOW_ALL_USERS:-}
+      # Per-source allowlists (only enforced when LINE_ALLOW_ALL_USERS is false).
+      # IDs: U=user, C=group, R=room. LINE_HOME_CHANNEL = default target for cron /
+      # notification delivery (set to a group ID to post there proactively).
+      - LINE_ALLOWED_USERS=${LINE_ALLOWED_USERS:-}
+      - LINE_ALLOWED_GROUPS=${LINE_ALLOWED_GROUPS:-}
+      - LINE_ALLOWED_ROOMS=${LINE_ALLOWED_ROOMS:-}
+      - LINE_HOME_CHANNEL=${LINE_HOME_CHANNEL:-}
+    volumes:
+      - hermes-data:/opt/data
+      # s6 cont-init hook: re-applies the "@ふぐ" LINE group mention-gate on every
+      # boot (the adapter it patches lives in the image, not the volume, so the
+      # edit is lost on recreate). Idempotent + never fails boot. See the script.
+      - ./hermes/init/10-line-fugu-gate.sh:/etc/cont-init.d/10-line-fugu-gate:ro
+      # s6 cont-init hook: re-applies the LINE Markdown-table flattener on every
+      # boot. The stripper it patches (strip_markdown_preserving_urls) lives in
+      # the image, so the edit is lost on recreate. Idempotent + never fails boot.
+      - ./hermes/init/30-line-table-strip.sh:/etc/cont-init.d/30-line-table-strip:ro
+    # No depends_on vllm-qwen35: hermes doesn't need vLLM at startup (only when a
+    # message is actually handled), and depending on it would pull vLLM into the
+    # scope of `docker compose up hermes`, risking an accidental 122B recreate.
+    restart: always
+
 volumes:
   open-webui:
+  hermes-data:
 
 networks:
   default:

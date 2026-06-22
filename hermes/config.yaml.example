@@ -1,0 +1,45 @@
+# Seed for Hermes' config (the REAL config lives in the hermes-data volume at
+# /opt/data/config.yaml — Hermes self-manages and chowns it, so it is NOT
+# bind-mounted from the repo). This file documents the settings we rely on.
+#
+# To apply on a fresh volume: copy this into the container then restart, e.g.
+#   docker compose up -d hermes
+#   docker compose cp hermes/config.yaml.example hermes:/opt/data/config.yaml
+#   docker exec hermes chown 10000:10000 /opt/data/config.yaml
+#   docker compose restart hermes
+# (or just run `docker exec -it hermes hermes setup`).
+
+# Backend = local Qwen3.5-122B vLLM, direct, no API key (vLLM ignores it).
+model:
+  default: "qwen"
+  provider: "custom"
+  base_url: "http://vllm-qwen35:8000/v1"
+  api_key: "dummy"
+  context_length: 262144
+
+# Dashboard username/password auth plugin (creds come from .env via compose).
+# Required: the dashboard refuses non-loopback binds without an auth provider.
+plugins:
+  enabled:
+    - basic
+  # Bundled "platform" plugins auto-load regardless of `enabled`, so unused ones
+  # are silenced via `disabled` (matched by manifest name or path-derived key).
+  # raft-platform: we don't use raft.build; it otherwise warns "[raft] raft CLI
+  # not found in PATH" on every session since no `raft` CLI / RAFT_PROFILE is set.
+  disabled:
+    - raft-platform
+dashboard:
+  basic_auth: {}
+
+# Messaging platforms shown/toggled in the dashboard. Their creds are injected as
+# env vars from the repo .env via docker-compose.yml (NOT /opt/data/.env):
+#   discord: DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USERS, DISCORD_HOME_CHANNEL
+#   line:    LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_PUBLIC_URL,
+#            LINE_ALLOW_ALL_USERS
+# Disable a platform here if its creds are not set, to avoid the "adapter creation
+# failed" noise from an unconfigured platform.
+platforms:
+  discord:
+    enabled: true
+  line:
+    enabled: true
