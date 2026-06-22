@@ -165,9 +165,14 @@ def _best_match(data, name):
 
 
 # ---------- subcommands ----------
-def cmd_resolve(args):
-    platform = args.platform.strip().lower()
-    key = f"{platform}:{args.user_id}"
+def resolve(platform, user_id, display_name=None, group_id=None, no_fetch=False):
+    """Map (platform, user_id) -> person, creating/refreshing as needed.
+
+    Library entry point — used by both the CLI and the persona-inject hook.
+    Returns a dict: {person_id, display, name_to_use, is_new, suggestion}.
+    """
+    platform = platform.strip().lower()
+    key = f"{platform}:{user_id}"
     with _Lock():
         data = _load()
         # known identity -> return + refresh
@@ -175,11 +180,11 @@ def cmd_resolve(args):
             pid = data["index"][key]
             person = data["people"][pid]
             plat = person.setdefault("platforms", {}).setdefault(platform, {})
-            plat["user_id"] = args.user_id
+            plat["user_id"] = user_id
             plat["last_seen"] = _now()
-            name = args.display_name
-            if not name and platform == "line" and not args.no_fetch and not plat.get("display_name"):
-                name = fetch_line_name(args.user_id, args.group_id)
+            name = display_name
+            if not name and platform == "line" and not no_fetch and not plat.get("display_name"):
+                name = fetch_line_name(user_id, group_id)
             if name:
                 plat["display_name"] = name
                 _add_alias(person, name)
@@ -190,9 +195,9 @@ def cmd_resolve(args):
                     "is_new": False, "suggestion": None}
 
         # unknown identity -> resolve name, fuzzy-check, create
-        name = args.display_name
-        if not name and platform == "line" and not args.no_fetch:
-            name = fetch_line_name(args.user_id, args.group_id)
+        name = display_name
+        if not name and platform == "line" and not no_fetch:
+            name = fetch_line_name(user_id, group_id)
 
         suggestion = None
         if name:
@@ -201,14 +206,14 @@ def cmd_resolve(args):
                 suggestion = {"person_id": mpid, "display": data["people"][mpid].get("display"),
                               "score": score,
                               "hint": "same person? confirm with: persona.py link "
-                                      f"--person {mpid} --platform {platform} --user-id {args.user_id}"}
+                                      f"--person {mpid} --platform {platform} --user-id {user_id}"}
 
         pid = _next_pid(data)
-        display = name or args.user_id
+        display = name or user_id
         data["people"][pid] = {
             "display": display,
             "aliases": [],
-            "platforms": {platform: {"user_id": args.user_id,
+            "platforms": {platform: {"user_id": user_id,
                                      "display_name": name or None,
                                      "last_seen": _now()}},
             "link_confidence": "confirmed",
@@ -219,6 +224,19 @@ def cmd_resolve(args):
         _save(data)
         return {"person_id": pid, "display": display,
                 "name_to_use": display, "is_new": True, "suggestion": suggestion}
+
+
+def get_notes_text(pid):
+    """Return the raw notes markdown for a person (empty string if none)."""
+    try:
+        with open(_notes_path(pid), encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def cmd_resolve(args):
+    return resolve(args.platform, args.user_id, args.display_name, args.group_id, args.no_fetch)
 
 
 def cmd_link(args):
@@ -280,12 +298,7 @@ def cmd_merge(args):
 
 
 def cmd_get_notes(args):
-    p = _notes_path(args.person)
-    try:
-        with open(p, encoding="utf-8") as f:
-            return {"person_id": args.person, "notes": f.read()}
-    except OSError:
-        return {"person_id": args.person, "notes": ""}
+    return {"person_id": args.person, "notes": get_notes_text(args.person)}
 
 
 def cmd_add_note(args):

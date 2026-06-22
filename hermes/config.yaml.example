@@ -22,6 +22,9 @@ model:
 plugins:
   enabled:
     - basic
+    # pre_llm_call hook: auto-inject the sender's identity + persona notes every
+    # LINE/Discord turn (user plugin at /opt/data/.hermes/plugins/persona-inject).
+    - persona-inject
   # Bundled "platform" plugins auto-load regardless of `enabled`, so unused ones
   # are silenced via `disabled` (matched by manifest name or path-derived key).
   # raft-platform: we don't use raft.build; it otherwise warns "[raft] raft CLI

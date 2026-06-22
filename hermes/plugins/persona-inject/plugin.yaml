@@ -1,0 +1,7 @@
+name: persona-inject
+version: 1.0.0
+description: "Auto-inject the message sender's resolved identity + persona notes into every LINE/Discord turn via a pre_llm_call hook, so the agent always knows who it is talking to without calling a skill."
+author: prism
+kind: standalone
+hooks:
+  - pre_llm_call
