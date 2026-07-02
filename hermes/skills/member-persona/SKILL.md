@@ -1,6 +1,6 @@
 ---
 name: member-persona
-description: Identify who sent a message (LINE/Discord) by user_id, remember a loose per-person persona, and personalize replies. Use this BEFORE replying in any group so you address the real sender, never a wrong default name.
+description: Identify the sender of a LINE/Discord message by user_id, AND look up any circle member BY NAME (e.g. "かつおさんの好きな食べ物は?"), remember loose per-person notes, and personalize replies. Use BEFORE replying in a group to address the real sender; whenever someone is referred to BY NAME; and whenever you learn a new fact about a person (record it).
 version: 1.1.0
 author: prism
 license: MIT
@@ -79,16 +79,47 @@ python3 /opt/data/skills/communication/member-persona/scripts/persona.py link \
 python3 /opt/data/skills/communication/member-persona/scripts/persona.py merge --into p_0001 --from p_0007
 ```
 
+## 名前で人を調べる（重要）
+
+「かつおさんの好きな食べ物は？」のように**名前で誰かについて聞かれたら**、user_idが分からなくても `find` で台帳を検索する：
+```bash
+python3 /opt/data/skills/communication/member-persona/scripts/persona.py find --name かつお
+```
+返り値の `matches` に person_id・display・platforms・**notes（その人のメモ）** が入る。メモから答える（例: notesに「好きな食べ物=えんがわ」とあればそれを使う）。
+- 複数候補が出たら一番scoreが高い人、または文脈で判断。
+- 見つからなければ「まだ覚えていない」と正直に答え、本人に聞くよう促す。
+
+全メンバーをざっと見るには `list`:
+```bash
+python3 /opt/data/skills/communication/member-persona/scripts/persona.py list
+```
+※ `find`/`list` は「これまでに発言を観測した人」だけが対象（台帳に載っている人）。未観測の人は出ない。
+
+## 誰かについて事実を知ったら必ず記録する（学習ループ）
+
+人物に関する情報が会話に出てきたら（例:「かつおの好きな食べ物はえんがわ」「さとうさんは水曜来れない」）、**その人を名前で引いて add-note で残す**。これをやらないと次回名前で聞かれても答えられない。
+```bash
+P=/opt/data/skills/communication/member-persona/scripts/persona.py
+# 1) 名前→person_id
+python3 "$P" find --name かつお
+# 2) その人にメモ追記
+python3 "$P" add-note --person p_0002 --text "好きな食べ物=えんがわ"
+```
+- 本人が話した内容でも、第三者が「○○さんは…」と話した内容でも記録してよい。
+- 名前が台帳に無ければ、その人がまだ未観測。その場で無理に作らず、本人の発言時に resolve で登録される（または分かっている user_id があれば resolve --display-name で登録）。
+
 ## サブコマンド一覧
 
 | コマンド | 用途 |
 |---|---|
 | `resolve --platform <p> --user-id <id> [--group-id G] [--display-name N] [--no-fetch]` | 送信者→person_id（LINEは本名自動解決）。fuzzy候補も返す |
+| `find --name <名前>` | **名前で人を検索**（メモ付きで返す）。名前ベースの質問に使う |
+| `list` | 既知メンバー一覧 |
 | `link --person <pid> --platform <p> --user-id <id> [--display-name N]` | 既存人物に別PFの identity を確定追加 |
 | `merge --into <pid> --from <pid>` | 重複人物を統合（メモも結合） |
 | `get-notes --person <pid>` | 人物メモを取得 |
 | `add-note --person <pid> --text "..."` | 人物メモに1行追記 |
-| `show --person <pid>` / `list` | 確認用 |
+| `show --person <pid>` | 確認用 |
 
 ## 注意
 

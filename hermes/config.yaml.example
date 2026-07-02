@@ -23,7 +23,8 @@ plugins:
   enabled:
     - basic
     # pre_llm_call hook: auto-inject the sender's identity + persona notes every
-    # LINE/Discord turn (user plugin at /opt/data/.hermes/plugins/persona-inject).
+    # LINE/Discord turn (user plugin at /opt/data/plugins/persona-inject —
+    # HERMES_HOME=/opt/data, so user plugins live in $HERMES_HOME/plugins).
     - persona-inject
   # Bundled "platform" plugins auto-load regardless of `enabled`, so unused ones
   # are silenced via `disabled` (matched by manifest name or path-derived key).
@@ -33,6 +34,11 @@ plugins:
     - raft-platform
 dashboard:
   basic_auth: {}
+
+# Cron deliveries: drop the "Cronjob Response: …/To stop or manage…" header+footer
+# so scheduled posts (event reminders to Discord/LINE) arrive as clean body text.
+cron:
+  wrap_response: false
 
 # Messaging platforms shown/toggled in the dashboard. Their creds are injected as
 # env vars from the repo .env via docker-compose.yml (NOT /opt/data/.env):

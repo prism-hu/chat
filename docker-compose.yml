@@ -131,6 +131,13 @@ services:
       # boot. The stripper it patches (strip_markdown_preserving_urls) lives in
       # the image, so the edit is lost on recreate. Idempotent + never fails boot.
       - ./hermes/init/30-line-table-strip.sh:/etc/cont-init.d/30-line-table-strip:ro
+      # s6 cont-init hook: opens the Discord user-allowlist gate for home/free
+      # channels (anyone, any message) and replies to the bot in any channel
+      # (anyone). The adapter it patches lives in the image, so re-apply at boot.
+      - ./hermes/init/40-discord-open-gate.sh:/etc/cont-init.d/40-discord-open-gate:ro
+      # s6 cont-init hook: makes a reply to the bot satisfy require_mention in
+      # non-free channels (so "reply to ふぐ" works anywhere, not just home).
+      - ./hermes/init/41-discord-reply-mention.sh:/etc/cont-init.d/41-discord-reply-mention:ro
     # No depends_on vllm-qwen35: hermes doesn't need vLLM at startup (only when a
     # message is actually handled), and depending on it would pull vLLM into the
     # scope of `docker compose up hermes`, risking an accidental 122B recreate.

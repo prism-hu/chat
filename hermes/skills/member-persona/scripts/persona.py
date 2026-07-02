@@ -255,15 +255,28 @@ def cmd_link(args):
         _add_alias(person, args.display_name)
         person["link_confidence"] = "confirmed"
         person["updated_at"] = _now()
-        # repoint index; drop any other person that owned this key
+        # repoint index; drop any other person that owned this key, and prune
+        # anyone left with no platforms AND no notes (avoid empty orphans).
+        removed_orphans = []
         for pid, p in list(data["people"].items()):
             if pid != args.person:
                 pl = p.get("platforms", {}).get(platform)
                 if pl and pl.get("user_id") == args.user_id:
                     p["platforms"].pop(platform, None)
+                if not p.get("platforms") and not get_notes_text(pid).strip():
+                    # migrate any aliases worth keeping onto the target, then drop
+                    _add_alias(person, p.get("display"))
+                    for a in p.get("aliases", []):
+                        _add_alias(person, a)
+                    data["people"].pop(pid, None)
+                    for k, v in list(data["index"].items()):
+                        if v == pid:
+                            data["index"].pop(k, None)
+                    removed_orphans.append(pid)
         data["index"][key] = args.person
         _save(data)
-        return {"person_id": args.person, "linked": key, "display": person.get("display")}
+        return {"person_id": args.person, "linked": key, "display": person.get("display"),
+                "removed_orphans": removed_orphans}
 
 
 def cmd_merge(args):
@@ -330,6 +343,36 @@ def cmd_list(args):
     return {"count": len(out), "people": out}
 
 
+def cmd_find(args):
+    """Fuzzy-search known people by name. Use when asked about someone by NAME
+    (e.g. 'かつおさんの好きな食べ物') rather than by user_id."""
+    data = _load()
+    q = _norm(args.name)
+    results = []
+    for pid, p in data["people"].items():
+        names = [p.get("display", "")] + p.get("aliases", [])
+        score = 0.0
+        for n in names:
+            nn = _norm(n)
+            if not nn:
+                continue
+            s = difflib.SequenceMatcher(None, q, nn).ratio()
+            if q and (q in nn or nn in q):
+                s = max(s, 0.9)
+            score = max(score, s)
+        if score >= 0.4:
+            results.append({
+                "person_id": pid,
+                "display": p.get("display"),
+                "aliases": p.get("aliases", []),
+                "platforms": list(p.get("platforms", {}).keys()),
+                "score": round(score, 3),
+                "notes": get_notes_text(pid).strip(),
+            })
+    results.sort(key=lambda r: r["score"], reverse=True)
+    return {"query": args.name, "count": len(results), "matches": results[:5]}
+
+
 def main():
     ap = argparse.ArgumentParser(description="member-persona registry + notes")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -369,6 +412,10 @@ def main():
 
     ls = sub.add_parser("list")
     ls.set_defaults(func=cmd_list)
+
+    fd = sub.add_parser("find")
+    fd.add_argument("--name", required=True, help="name to fuzzy-search among known people")
+    fd.set_defaults(func=cmd_find)
 
     args = ap.parse_args()
     try:
