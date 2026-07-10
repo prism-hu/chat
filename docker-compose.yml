@@ -79,73 +79,8 @@ services:
               capabilities: [gpu]
     restart: always
 
-  # Hermes Agent (Nous Research) — self-hosted agent with persistent memory and
-  # learned skills, backed by the local Qwen3.5-122B vLLM service (direct, no API
-  # key). Serves the web dashboard (UI for config / sessions / embedded chat) on
-  # :9119, protected by HTTP Basic auth (the dashboard refuses non-loopback binds
-  # unless an auth provider is registered — the "basic" plugin is enabled inside
-  # the config). Creds come from .env (NOT the config). config.yaml + memory /
-  # skills / sessions ALL live in the hermes-data volume (Hermes self-manages and
-  # chowns config.yaml to its own uid, so it is NOT bind-mounted from the repo —
-  # see hermes/config.yaml.example for the seed). Reaches vLLM in-network as
-  # vllm-qwen35:8000. CLI use: `docker exec -it hermes hermes chat`.
-  hermes:
-    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:latest}
-    pull_policy: missing
-    container_name: hermes
-    command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"]
-    ports:
-      - "9119:9119"
-      - "127.0.0.1:8646:8646"
-    environment:
-      - TZ=${TZ:-Asia/Tokyo}
-      - HERMES_UID=${HERMES_UID:-10000}
-      - HERMES_GID=${HERMES_GID:-10000}
-      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:?Set HERMES_DASHBOARD_BASIC_AUTH_USERNAME in .env (see .env.example)}
-      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:?Set HERMES_DASHBOARD_BASIC_AUTH_PASSWORD in .env (see .env.example)}
-      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?Set HERMES_DASHBOARD_BASIC_AUTH_SECRET in .env (see .env.example)}
-      # Platform creds, injected from .env (NOT /opt/data/.env). Empty-defaulted so
-      # `compose up` still starts when a platform is left disabled in config.yaml;
-      # whether a platform is active is decided by platforms.*.enabled there.
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
-      - DISCORD_HOME_CHANNEL=${DISCORD_HOME_CHANNEL:-}
-      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:-}
-      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:-}
-      - LINE_PUBLIC_URL=${LINE_PUBLIC_URL:-}
-      - LINE_ALLOW_ALL_USERS=${LINE_ALLOW_ALL_USERS:-}
-      # Per-source allowlists (only enforced when LINE_ALLOW_ALL_USERS is false).
-      # IDs: U=user, C=group, R=room. LINE_HOME_CHANNEL = default target for cron /
-      # notification delivery (set to a group ID to post there proactively).
-      - LINE_ALLOWED_USERS=${LINE_ALLOWED_USERS:-}
-      - LINE_ALLOWED_GROUPS=${LINE_ALLOWED_GROUPS:-}
-      - LINE_ALLOWED_ROOMS=${LINE_ALLOWED_ROOMS:-}
-      - LINE_HOME_CHANNEL=${LINE_HOME_CHANNEL:-}
-    volumes:
-      - hermes-data:/opt/data
-      # s6 cont-init hook: re-applies the "@ふぐ" LINE group mention-gate on every
-      # boot (the adapter it patches lives in the image, not the volume, so the
-      # edit is lost on recreate). Idempotent + never fails boot. See the script.
-      - ./hermes/init/10-line-fugu-gate.sh:/etc/cont-init.d/10-line-fugu-gate:ro
-      # s6 cont-init hook: re-applies the LINE Markdown-table flattener on every
-      # boot. The stripper it patches (strip_markdown_preserving_urls) lives in
-      # the image, so the edit is lost on recreate. Idempotent + never fails boot.
-      - ./hermes/init/30-line-table-strip.sh:/etc/cont-init.d/30-line-table-strip:ro
-      # s6 cont-init hook: opens the Discord user-allowlist gate for home/free
-      # channels (anyone, any message) and replies to the bot in any channel
-      # (anyone). The adapter it patches lives in the image, so re-apply at boot.
-      - ./hermes/init/40-discord-open-gate.sh:/etc/cont-init.d/40-discord-open-gate:ro
-      # s6 cont-init hook: makes a reply to the bot satisfy require_mention in
-      # non-free channels (so "reply to ふぐ" works anywhere, not just home).
-      - ./hermes/init/41-discord-reply-mention.sh:/etc/cont-init.d/41-discord-reply-mention:ro
-    # No depends_on vllm-qwen35: hermes doesn't need vLLM at startup (only when a
-    # message is actually handled), and depending on it would pull vLLM into the
-    # scope of `docker compose up hermes`, risking an accidental 122B recreate.
-    restart: always
-
 volumes:
   open-webui:
-  hermes-data:
 
 networks:
   default:
