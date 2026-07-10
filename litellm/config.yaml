@@ -19,6 +19,12 @@ model_list:
       model: openai/qwen
       api_base: http://vllm-qwen35:8000/v1
       api_key: dummy
+      # Qwen3.5 thinking-mode recommended sampling (HF model card) — mirrors the
+      # vLLM `--override-generation-config`. top_k is non-OpenAI → extra_body.
+      temperature: 1.0
+      top_p: 0.95
+      presence_penalty: 1.5
+      extra_body: {"top_k": 20}
 
   # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
   # Reached over the public internet (not in-network). No API key required.
