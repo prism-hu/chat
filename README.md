@@ -51,6 +51,7 @@ OpenWebUI からは2系統が見える。**重複を避けるため、Ollama モ
 | `claude-opus-4-6` | Anthropic API | Claude Opus 4.6 |
 | `claude-sonnet-4-6` | Anthropic API | Claude Sonnet 4.6 |
 | `qwen3.5-122b-custom` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
+| `kimi-k2.6` | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:8000/v1` に直結（公開経路・API キー不要）。Kimi K2.6 |
 
 **Ollama（ホスト実行）— OpenWebUI 直結。`:4000` 外部 API には出ない**
 `gpt-oss-20b` / `gpt-oss-120b` / `sip-jmed-13b` / `sip-jmed-8x13b-q8` / `nemotron-3-nano` / `nemotron-3-super` / `qwen3.5-9b` / `qwen3.5-27b`

@@ -20,5 +20,13 @@ model_list:
       api_base: http://vllm-qwen35:8000/v1
       api_key: dummy
 
+  # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
+  # Reached over the public internet (not in-network). No API key required.
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openai/kimi-k2.6
+      api_base: http://llens.med.hokudai.ac.jp:8000/v1
+      api_key: dummy
+
 litellm_settings:
   drop_params: true
