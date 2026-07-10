@@ -27,6 +27,11 @@ model_list:
       model: openai/kimi-k2.6
       api_base: http://llens.med.hokudai.ac.jp:8000/v1
       api_key: dummy
+      # Kimi K2.6 official recommended sampling (Thinking mode; this endpoint is a
+      # thinking model). temperature=1.0 / top_p=0.95. No official top_k. Refs:
+      # huggingface.co/moonshotai/Kimi-K2.6 , kimi-k2.org/blog/24-kimi-k2-6-release
+      temperature: 1.0
+      top_p: 0.95
 
 litellm_settings:
   drop_params: true
