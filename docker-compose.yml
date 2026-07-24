@@ -1,20 +1,31 @@
 services:
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
+  nucllei:
+    # technoplasm/nucllei — Open WebUI fork used as the chat frontend.
+    # 上流 CI が GHCR に出すのは amd64 のみ。DGX Spark は aarch64 なので
+    # submodule (vendor/nucllei) から自前ビルドする:
+    #   git submodule update --init --recursive
+    #   docker compose build nucllei
+    # 版を上げるときは submodule を目的の tag に進めてから再ビルド。
+    image: nucllei:local
+    build:
+      context: ./vendor/nucllei
+    container_name: nucllei
     environment:
       - TZ=${TZ:-Asia/Tokyo}
-      - OLLAMA_BASE_URL=http://172.28.0.1:11434
-      - DEFAULT_LOCALE=ja-JP
+      # public base URL (RC): webhooks / share links
       - WEBUI_URL=https://chat.prism-hu.org
-      - WEBUI_SHOW_UPDATE_NOTIFICATION=false
-      - ENABLE_FOLLOW_UP_GENERATION=false
+      # shipped locales: ja / en / zh-CN
+      - DEFAULT_LOCALE=ja
+      # LiteLLM is the ONLY model source (Claude / vLLM / Ollama all come through it).
+      # Ollama is no longer wired up directly — it is a wildcard route in litellm/config.yaml.
       - OPENAI_API_BASE_URL=http://litellm:4000/v1
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
+      - ENABLE_OLLAMA_API=false
     ports:
       - "8080:8080"
     volumes:
-      - open-webui:/app/backend/data
+      # DATA_DIR: SQLite webui.db, uploads, caches, secret key
+      - nucllei:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -31,6 +42,8 @@ services:
       - TZ=${TZ:-Asia/Tokyo}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
       - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN:?Set CLAUDE_OAUTH_TOKEN in .env (see .env.example)}
+      # kimi-k2.6 (llens) のみが使う。未設定でも他モデルは動くので必須にはしない。
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
@@ -80,7 +93,7 @@ services:
     restart: always
 
 volumes:
-  open-webui:
+  nucllei:
 
 networks:
   default:

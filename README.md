@@ -8,15 +8,42 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 
 ## スタック
 
-- OpenWebUI
+- Nucllei — フロントエンド。Open WebUI フォーク（technoplasm）/ `vendor/nucllei` submodule
 - Ollama (ホスト実行)
 - LiteLLM
 - vLLM (Qwen3.5-122B, DGX Spark SM121 最適化 / `vendor/qwen35-spark` submodule)
 - ふぐ (fugu) — Hermes Agent。別リポジトリ `fugu/` へ分離（本スタックの network / volume に相乗り）
 
+## Nucllei (フロントエンド)
+
+[technoplasm/nucllei](https://github.com/technoplasm/nucllei)（Open WebUI v0.6.5 フォーク）を `:8080` で配信。
+
+**自前ビルドが必須**: 上流 CI が GHCR に出すイメージは **amd64 のみ**で、DGX Spark は aarch64。
+そのため GHCR から pull せず `vendor/nucllei` submodule から arm64 をネイティブビルドする。
+
+```bash
+git submodule update --init --recursive
+docker compose build nucllei          # 初回 ~数分（pnpm build + uv sync）
+docker compose up -d --no-deps nucllei
+
+# 最初の管理者はサーバー側で作る（CLI は console script `nucllei`）
+docker exec -it nucllei nucllei create-admin --email <you>
+```
+
+- 版を上げるとき: submodule を目的の tag へ進めて（`cd vendor/nucllei && git fetch && git checkout <tag>`）再ビルド。
+  ピンした commit がこのリポジトリの版の真実源。
+- `.dockerignore` が `.git` を除くため UI の版表示は `package.json` フォールバックになる。
+  正確に出したければ `docker compose build --build-arg APP_VERSION=<tag> nucllei`。
+- 永続状態は volume `nucllei:/app/data`（SQLite `webui.db` / アップロード / secret key）。
+  旧 OpenWebUI からの移行時、**旧 volume `open-webui` のデータ（チャット履歴・ユーザー）は引き継がれない**
+  （別 volume かつ fork 後に DB スキーマが分岐）。旧 volume はロールバック用に残してある。
+- 設定は env が正（`docker-compose.yml`）。env を空にした項目のみ管理画面の保存値が生きる。
+- モデル源は LiteLLM 一本（下記）。Ollama にも直結しない。
+
 ## Ollama 設定
 
-Ollama はホストで動作し、Docker コンテナからは `host.docker.internal:11434` 経由でアクセスする。
+Ollama はホストで動作する。**叩くのは LiteLLM だけ**（`litellm/config.yaml` の `ollama/*` が
+`http://172.28.0.1:11434` を向く）。Nucllei からは直結しない。
 
 セキュリティのため Ollama は Docker ブリッジ IP (`172.28.0.1`) にのみバインドする。
 `/etc/systemd/system/ollama.service.d/override.conf` を作成:
@@ -42,19 +69,31 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 
 ### 利用可能なモデル
 
-OpenWebUI からは2系統が見える。**重複を避けるため、Ollama モデルは OpenWebUI が Ollama 直結
-（`OLLAMA_BASE_URL`）で出し、LiteLLM には登録しない**（LiteLLM に入れると同じモデルが UI に二重表示される）。
+**モデル源は LiteLLM 一本**。Nucllei は `OPENAI_API_BASE_URL=http://litellm:4000/v1` のみを見る
+（`ENABLE_OLLAMA_API=false`）。Ollama も LiteLLM 経由になったので、**UI で使えるモデル =
+外部 API (`:4000`) で使えるモデル**で完全に一致する。
 
-**LiteLLM (`:4000`) 経由 — 外部 API でも利用可**
 | model_name | バックエンド | 内容 |
 |---|---|---|
 | `claude-opus-4-6` | Anthropic API | Claude Opus 4.6 |
 | `claude-sonnet-4-6` | Anthropic API | Claude Sonnet 4.6 |
 | `qwen3.5-122b-custom` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
-| `kimi-k2.6` | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:8000/v1` に直結（公開経路・API キー不要）。Kimi K2.6 |
+| `kimi-k2.6` | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:13300/v1` に直結（公開経路・API キー不要）。Kimi K2.6 |
+| `ollama/<name>` | Ollama (ホスト実行) | ワイルドカード。ホストに入っているモデルが自動で並ぶ（下記） |
 
-**Ollama（ホスト実行）— OpenWebUI 直結。`:4000` 外部 API には出ない**
-`gpt-oss-20b` / `gpt-oss-120b` / `sip-jmed-13b` / `sip-jmed-8x13b-q8` / `nemotron-3-nano` / `nemotron-3-super` / `qwen3.5-9b` / `qwen3.5-27b`
+**Ollama = ワイルドカード `ollama/*`**（`litellm/config.yaml`）。LiteLLM が `/v1/models` のたびに
+Ollama の `/api/tags` を引くので（`check_provider_endpoint: true`）、**`ollama pull` したものが
+設定変更なしで出てくる**。名前は `ollama/` 付き（例 `ollama/gpt-oss:20b`）。
+
+```bash
+# 実際に何が出るかは常にこれが正
+curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <LITELLM_MASTER_KEY>" \
+  | python3 -c 'import sys,json;[print(m["id"]) for m in json.load(sys.stdin)["data"]]'
+```
+
+> 既知の癖: ワイルドカード定義そのもの (`ollama/*`) もモデル一覧に混ざる（LiteLLM の仕様。
+> router に deployment がある場合は一覧から除去されない）。選んでも動かないので、
+> Nucllei 管理画面でこのモデルを無効化（`is_active` トグル）しておく。DB に残るので一度だけでよい。
 
 ### 使い方
 

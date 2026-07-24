@@ -8,3 +8,5 @@ models/.cache/
 # Large build artifacts (docker image tarballs etc.) — keep only the README
 artifacts/*
 !artifacts/README.md
+
+_links/

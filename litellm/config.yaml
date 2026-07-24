@@ -9,11 +9,17 @@ model_list:
       model: anthropic/claude-sonnet-4-6
       api_key: os.environ/CLAUDE_OAUTH_TOKEN
 
+  # --- Ollama (host, via the docker bridge gateway) ---
+  # Wildcard route: LiteLLM matches `ollama/<name>` at request time (PatternMatchRouter)
+  # and lists the host's ACTUAL models in /v1/models by calling Ollama's /api/tags
+  # (requires check_provider_endpoint below). So `ollama pull` shows up with no edit
+  # here. Model names carry the `ollama/` prefix (e.g. `ollama/gpt-oss:20b`).
+  - model_name: ollama/*
+    litellm_params:
+      model: ollama/*
+      api_base: http://172.28.0.1:11434
+
   # --- vLLM custom build (DGX Spark SM121), served by the vllm-qwen35 service ---
-  # NOTE: Ollama models are intentionally NOT registered here — OpenWebUI talks to
-  # Ollama directly (OLLAMA_BASE_URL), so listing them in LiteLLM too would show
-  # each model twice in the UI. Trade-off: the external :4000 API now exposes only
-  # Claude + this custom vLLM (not the Ollama models).
   - model_name: qwen3.5-122b-custom
     litellm_params:
       model: openai/qwen
@@ -27,12 +33,13 @@ model_list:
       extra_body: {"top_k": 20}
 
   # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
-  # Reached over the public internet (not in-network). No API key required.
+  # Reached over the public internet (not in-network). 2026-07 に認証必須化された
+  # (api_key: dummy だと 401 Unauthorized)。キーは ~/chat/.env の KIMI_API_KEY。
   - model_name: kimi-k2.6
     litellm_params:
       model: openai/kimi-k2.6
       api_base: http://llens.med.hokudai.ac.jp:13300/v1
-      api_key: dummy
+      api_key: os.environ/KIMI_API_KEY
       # Kimi K2.6 official recommended sampling (Thinking mode; this endpoint is a
       # thinking model). temperature=1.0 / top_p=0.95. No official top_k. Refs:
       # huggingface.co/moonshotai/Kimi-K2.6 , kimi-k2.org/blog/24-kimi-k2-6-release
@@ -41,3 +48,8 @@ model_list:
 
 litellm_settings:
   drop_params: true
+  # Resolve wildcard routes against the live provider endpoint instead of a static
+  # built-in list — this is what makes `ollama/*` expand to the models actually
+  # installed on the host. Only affects wildcard entries; the explicit models above
+  # are listed as-is. If Ollama is down, /v1/models falls back to a static list.
+  check_provider_endpoint: true
