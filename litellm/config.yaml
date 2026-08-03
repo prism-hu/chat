@@ -9,6 +9,38 @@ model_list:
       model: anthropic/claude-sonnet-4-6
       api_key: os.environ/CLAUDE_OAUTH_TOKEN
 
+  # --- OpenAI (公式 API 直) ---
+  # キーは ~/chat/.env の OPENAI_API_KEY。未設定/空でも litellm は起動し
+  # /v1/models にも並ぶが、リクエストは 401 になる。
+  # 推論モデル (gpt-5.x) は temperature/top_p を受け付けない → drop_params: true
+  # が落とすので、ここでは sampling を指定しない。
+  #
+  # gpt-5.6 ラインナップ (2026-08 時点)。3つとも context 1.05M / chat mode。
+  # 価格は $/1M tokens (in / out、cached in はその 1/10):
+  #   luna   0.20 /  1.20   — 低価格枠。日常用
+  #   terra  2.00 / 12.00   — 中位。旧 gpt-5.4 ($2.50/$15.00) の下位互換的な位置
+  #   sol    5.00 / 30.00   — フラッグシップ。gpt-5.5 / gpt-5.6 base と同額
+  # 参考: 旧 gpt-5.1 は $1.25/$10.00 で context 272K。
+  #
+  # 使うモデルを増やすときはこのブロックに追記する。実際に使える ID は
+  #   curl -s https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
+  # で確認できる (2026-08 時点で 125 件)。ただし mode が `responses` のモデル
+  # (gpt-5.x-pro / -codex 系) は Chat Completions では叩けないので注意。
+  - model_name: gpt-5.6-luna
+    litellm_params:
+      model: openai/gpt-5.6-luna
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-5.6-terra
+    litellm_params:
+      model: openai/gpt-5.6-terra
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-5.6-sol
+    litellm_params:
+      model: openai/gpt-5.6-sol
+      api_key: os.environ/OPENAI_API_KEY
+
   # --- Ollama (host, via the docker bridge gateway) ---
   # Wildcard route: LiteLLM matches `ollama/<name>` at request time (PatternMatchRouter)
   # and lists the host's ACTUAL models in /v1/models by calling Ollama's /api/tags

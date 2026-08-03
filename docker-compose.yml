@@ -44,6 +44,8 @@ services:
       - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN:?Set CLAUDE_OAUTH_TOKEN in .env (see .env.example)}
       # kimi-k2.6 (llens) のみが使う。未設定でも他モデルは動くので必須にはしない。
       - KIMI_API_KEY=${KIMI_API_KEY:-}
+      # gpt-* (OpenAI 公式 API) のみが使う。同上、必須にはしない。
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
