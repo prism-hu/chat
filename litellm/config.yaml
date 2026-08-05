@@ -64,6 +64,21 @@ model_list:
       presence_penalty: 1.5
       extra_body: {"top_k": 20}
 
+  # --- llama.cpp (DGX Spark GB10), served by the llamacpp-step37 service ---
+  # Step-3.7-Flash (198B MoE VLM / GGUF IQ4_XS)。vllm-qwen35 とは排他なので、
+  # 片方を止めてもう片方を上げる運用。止まっている側はここに残っていても
+  # /v1/models には並ぶが、リクエストは接続エラーになる。
+  #
+  # 推論深度は chat template の変数 `reasoning_effort` (low|medium|high、既定 medium)。
+  # llama.cpp では OpenAI の reasoning_effort ではなく chat_template_kwargs で渡す。
+  # 常時 high が欲しければ、この下に model_name: step-3.7-flash-high として
+  # extra_body: {"chat_template_kwargs": {"reasoning_effort": "high"}} 付きで足す。
+  - model_name: step-3.7-flash
+    litellm_params:
+      model: openai/step37
+      api_base: http://llamacpp-step37:8000/v1
+      api_key: dummy
+
   # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
   # Reached over the public internet (not in-network). 2026-07 に認証必須化された
   # (api_key: dummy だと 401 Unauthorized)。キーは ~/chat/.env の KIMI_API_KEY。

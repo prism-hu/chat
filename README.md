@@ -12,6 +12,9 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 - Ollama (ホスト実行)
 - LiteLLM
 - vLLM (Qwen3.5-122B, DGX Spark SM121 最適化 / `vendor/qwen35-spark` submodule)
+- llama.cpp (Step-3.7-Flash 198B MoE VLM, GGUF IQ4_XS / `llamacpp/Dockerfile`)
+  — **vLLM の Qwen3.5 とは排他**（105GB + 100GB で 128GB に収まらない）。
+  切り替え手順とチューニングは [`docs/step37-llamacpp.md`](docs/step37-llamacpp.md)
 - ふぐ (fugu) — Hermes Agent。別リポジトリ `fugu/` へ分離（本スタックの network / volume に相乗り）
 
 ## Nucllei (フロントエンド)
