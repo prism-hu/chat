@@ -25,13 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt
 
-# 既定は StepFun の fork。上流 ggml-org/llama.cpp は PR #23845 (2026-06-02) で
-# Step3.7 対応がマージ済みなので master でもビルドできるはずだが、DGX Spark で
-# 実績があるのは fork 側。上流を試すときは:
-#   docker compose build --build-arg LLAMACPP_REPO=https://github.com/ggml-org/llama.cpp.git \
-#                        --build-arg LLAMACPP_REF=master llamacpp-step37
-ARG LLAMACPP_REPO=https://github.com/stepfun-ai/llama.cpp.git
-ARG LLAMACPP_REF=step3.7
+# 既定は上流 ggml-org/master。Step3.7 対応は PR #23845 (2026-06-02) でマージ済みで、
+# 本体・vision・tool call とも問題なく動く。StepFun の fork (step3.7 ブランチ) でも
+# 本体は動くが、MTP のドラフト GGUF が読めない (docs/step37-llamacpp.md)。
+# fork に戻すときは:
+#   docker compose build --build-arg LLAMACPP_REPO=https://github.com/stepfun-ai/llama.cpp.git \
+#                        --build-arg LLAMACPP_REF=step3.7 llamacpp-step37
+ARG LLAMACPP_REPO=https://github.com/ggml-org/llama.cpp.git
+ARG LLAMACPP_REF=master
 RUN git clone --depth 1 --branch "${LLAMACPP_REF}" "${LLAMACPP_REPO}" llama.cpp \
  || (git clone "${LLAMACPP_REPO}" llama.cpp && cd llama.cpp && git checkout "${LLAMACPP_REF}")
 

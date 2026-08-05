@@ -99,6 +99,8 @@ services:
   #   hf download stepfun-ai/Step-3.7-Flash-GGUF --include "IQ4_XS/*" \
   #     --include "mmproj-step3.7-flash-f16.gguf" --local-dir ~/models/step37-flash-iq4xs
   #
+  # 現状は停止中 (速度が実用に届かず vllm-qwen35 に戻した。docs 参照)。
+  #
   # !! vllm-qwen35 とは同時に起動できない (105GB + 100GB > 128GB 統合メモリ) !!
   #   docker compose stop vllm-qwen35
   #   docker compose up -d --build --no-deps llamacpp-step37
@@ -109,9 +111,10 @@ services:
     build:
       context: ./llamacpp
       args:
-        # 上流 master を試すときはここを書き換えるか --build-arg で上書きする。
-        LLAMACPP_REPO: ${LLAMACPP_REPO:-https://github.com/stepfun-ai/llama.cpp.git}
-        LLAMACPP_REF: ${LLAMACPP_REF:-step3.7}
+        # 上流 master が既定 (MTP のドラフトが読めるのは上流だけ)。StepFun の
+        # fork に戻すときはここを書き換えるか --build-arg で上書きする。
+        LLAMACPP_REPO: ${LLAMACPP_REPO:-https://github.com/ggml-org/llama.cpp.git}
+        LLAMACPP_REF: ${LLAMACPP_REF:-master}
         CMAKE_CUDA_ARCHITECTURES: ${CMAKE_CUDA_ARCHITECTURES:-121}
         BUILD_JOBS: ${BUILD_JOBS:-2}
     container_name: llamacpp-step37
@@ -125,9 +128,15 @@ services:
     command:
       - --model
       - ${STEP37_MODEL_PATH:-/models/step37-flash-iq4xs/IQ4_XS/Step-3.7-flash-IQ4_XS-00001-of-00003.gguf}
-      # vision (mmproj)。テキストだけで良ければこの 2 行を消すと 4GB 浮く。
-      - --mmproj
-      - ${STEP37_MMPROJ_PATH:-/models/step37-flash-iq4xs/mmproj-step3.7-flash-f16.gguf}
+      # !! vision (mmproj) と MTP は排他 !!
+      #    両方有効にすると画像を投げた瞬間に 500
+      #    (`decode() failed: failed to process speculative batch`)。
+      #    common_speculative_process() が全バッチに対して走る一方、MTP ドラフトは
+      #    画像埋め込み (token でなく embd の batch) を処理できないため。設定では
+      #    回避不可 (リクエスト単位の speculative.n_max: 0 でも同じ)。
+      #    vision を使いたいときは下 2 行を戻して --spec-* 4 行を消す (decode -30%)。
+      # - --mmproj
+      # - ${STEP37_MMPROJ_PATH:-/models/step37-flash-iq4xs/mmproj-step3.7-flash-f16.gguf}
       - --alias
       - step37
       - --host
@@ -151,6 +160,21 @@ services:
       - --parallel
       - "1"
       - --no-mmap
+      # MTP (Multi-Token Prediction) 投機デコード。ドラフト重み Q8_0 で +3.7GB。
+      # !! StepFun 公式の Step3.7-flash-mtp-Q8_0.gguf は使えない !!
+      #    fork の llama.cpp では `missing tensor 'blk.0.attn_norm.weight'` で
+      #    起動に失敗する。MTP-tail のドラフト読み込みに対応しているのは上流
+      #    master 側で、ドラフトも notSnix のものを使う (docs/step37-llamacpp.md)。
+      - --spec-type
+      - draft-mtp
+      - --spec-draft-model
+      - ${STEP37_MTP_PATH:-/models/step37-flash-iq4xs/Step-3.7-Flash-MTP-Q8_0.gguf}
+      # notSnix がスイープして出した推奨値。n-max を上げすぎると外れたときの
+      # やり直しコストで逆に遅くなる。
+      - --spec-draft-n-max
+      - "2"
+      - --spec-draft-p-min
+      - "0.60"
       # チャットテンプレートは GGUF 内蔵。--jinja がないと tool call も
       # reasoning_effort も効かないので必須。
       - --jinja

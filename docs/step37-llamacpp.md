@@ -1,5 +1,10 @@
 # Step-3.7-Flash on DGX Spark (llama.cpp)
 
+> **現状: 停止中（お蔵入り）。** 動作自体はすべて確認できたが、**速度が実用に届かない**
+> と判断して `vllm-qwen35` に戻した (2026-08-05)。MTP を入れても decode 31〜35 t/s。
+> 構成は残してあるので、下記の手順で切り替えれば再開できる。実測値は
+> 「計測結果」に全部残してある。
+
 StepFun [Step-3.7-Flash](https://huggingface.co/stepfun-ai/Step-3.7-Flash) を
 DGX Spark (GB10 / 128GB 統合メモリ / sm121 / aarch64) で動かすための構成。
 
@@ -71,6 +76,10 @@ MTP が使えるか未確認なので今は繋いでいない。
 ベースは [stevibe/step37-flash-dgx-spark](https://github.com/stevibe/step37-flash-dgx-spark) (MIT)。
 モデル自動 DL の entrypoint は落とし、起動フラグは `docker-compose.yml` の `command` に出してある。
 
+llama.cpp は **上流 ggml-org の master** を使う (build arg の既定)。StepFun の fork
+(`step3.7` ブランチ) でも本体は動くが、MTP のドラフトが読めない (下記)。fork に戻す
+場合は `LLAMACPP_REPO` / `LLAMACPP_REF` を上書きする。
+
 ```bash
 # ビルドは qwen を止めてから (nvcc がホスト RAM を食う。122B が ~100GB 保持している)
 docker compose stop vllm-qwen35
@@ -113,6 +122,63 @@ OpenAI の `reasoning_effort` ではなく `chat_template_kwargs` で渡す:
 
 速度の目安 (DGX Spark 実測報告): 短いコンテキストで **~30 t/s**、262K フルで **~11 t/s**。
 vLLM + MTP-2 の qwen3.5 より遅い。得るものは vision と agent/coding 性能。
+
+## MTP (投機デコード)
+
+**+30% 程度は稼げるが、vision と排他。**
+
+### 使うドラフトは notSnix のもの
+
+StepFun 公式の `Step3.7-flash-mtp-Q8_0.gguf` は**使えない**。fork の llama.cpp で
+ドラフトとして読ませると起動時に落ちる:
+
+```
+error loading model: missing tensor 'blk.0.attn_norm.weight'
+srv load_model: [spec] failed to measure draft model memory: failed to load model
+```
+
+MTP-tail のドラフト読み込みに対応しているのは**上流 master 側**。ドラフト本体も
+[notSnix/Step-3.7-Flash-Q4_K_M-MTP-GGUF](https://huggingface.co/notSnix/Step-3.7-Flash-Q4_K_M-MTP-GGUF)
+の `Step-3.7-Flash-MTP-Q8_0.gguf` (3.7GB) を使う。同 repo には古いビルド向けの
+パッチも置いてあるが、上流 master でビルドするなら不要。
+
+```bash
+hf download notSnix/Step-3.7-Flash-Q4_K_M-MTP-GGUF Step-3.7-Flash-MTP-Q8_0.gguf \
+  --local-dir ~/models/step37-flash-iq4xs
+
+# イメージを上流 master でビルドし直す (fork ではダメ)
+LLAMACPP_REPO=https://github.com/ggml-org/llama.cpp.git LLAMACPP_REF=master \
+  BUILD_JOBS=12 docker compose build llamacpp-step37
+```
+
+`--spec-draft-n-max 2 --spec-draft-p-min 0.60` は notSnix がスイープして出した推奨値。
+
+### vision とは併用できない
+
+mmproj と MTP を両方有効にすると、**画像を投げた瞬間に 500**:
+
+```
+decode() failed: failed to process speculative batch
+```
+
+`tools/server/server-context.cpp` の `common_speculative_process(spec, batch_view)` は
+すべてのバッチに対して走るが、MTP ドラフトは画像埋め込み (token ではなく embd の
+batch) を処理できない。リクエスト単位で `speculative.n_max: 0` を渡しても回避できない
+(サーバ側で常に呼ばれるため)。**どちらを取るかを選ぶしかない。**
+
+## 計測結果 (2026-08-05, IQ4_XS / ctx 64K / KV q8_0)
+
+| 構成 | prefill (4K prompt) | decode | メモリ |
+|---|---|---|---|
+| fork step3.7 + vision, MTP なし | 614 t/s | **26.5 t/s** | 109GB |
+| 上流 master + vision + MTP | — | **500 エラー** | — |
+| 上流 master + MTP, vision なし | 577 t/s | **31〜35 t/s** | 110GB |
+
+- ビルド 142 秒 (`BUILD_JOBS=12`)、モデルロード ~115 秒
+- 日本語・tool calling は全構成で正常。vision も MTP なしなら正常
+  (画像内の図形と文字を正確に読む)
+- 参考: GB10 のメモリ帯域から見た理論上限は ~45 t/s 程度 (active 11B × 4.25bit)。
+  つまり MTP ありで既にロードラインの 7〜8 割で、llama.cpp 側でこれ以上の伸びは薄い
 
 ## 256K まで伸ばす
 
