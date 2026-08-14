@@ -72,17 +72,19 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 
 ### 利用可能なモデル
 
-**モデル源は LiteLLM 一本**。Nucllei は `OPENAI_API_BASE_URL=http://litellm:4000/v1` のみを見る
-（`ENABLE_OLLAMA_API=false`）。Ollama も LiteLLM 経由になったので、**UI で使えるモデル =
-外部 API (`:4000`) で使えるモデル**で完全に一致する。
+**接続先は LiteLLM (`:4000`) 一本**だが、**ルートが 2 本**ある。Nucllei は
+`OPENAI_API_BASE_URLS=http://litellm:4000/v1;http://litellm:4000/sglang` の 2 つを見る
+（`ENABLE_OLLAMA_API=false`）。Ollama も LiteLLM 経由なので、**UI で使えるモデル =
+外部 API (`:4000`) で使えるモデル**である点は変わらない（ただし kimi だけ `/v1` ではなく
+`/sglang` 配下 — 理由は[下記](#litellm-を挟むと失われるもの2026-08-14-実測)）。
 
-| model_name | バックエンド | 内容 |
-|---|---|---|
-| `claude-opus-4-6` | Anthropic API | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | Anthropic API | Claude Sonnet 4.6 |
-| `qwen3.5-122b-custom` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
-| `kimi-k2.6` | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:13300/v1` に直結（公開経路・API キー不要）。Kimi K2.6 |
-| `ollama/<name>` | Ollama (ホスト実行) | ワイルドカード。ホストに入っているモデルが自動で並ぶ（下記） |
+| model_name | ルート | バックエンド | 内容 |
+|---|---|---|---|
+| `claude-opus-4-6` | `/v1` | Anthropic API | Claude Opus 4.6 |
+| `claude-sonnet-4-6` | `/v1` | Anthropic API | Claude Sonnet 4.6 |
+| `qwen3.5-122b-custom` | `/v1` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
+| `ollama/<name>` | `/v1` | Ollama (ホスト実行) | ワイルドカード。ホストに入っているモデルが自動で並ぶ（下記） |
+| `kimi-k2.6` | **`/sglang`** | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:13300/v1` への**生 pass-through**。認証は同じ master key |
 
 **Ollama = ワイルドカード `ollama/*`**（`litellm/config.yaml`）。LiteLLM が `/v1/models` のたびに
 Ollama の `/api/tags` を引くので（`check_provider_endpoint: true`）、**`ollama pull` したものが
@@ -97,6 +99,27 @@ curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <LITELLM_MASTER_K
 > 既知の癖: ワイルドカード定義そのもの (`ollama/*`) もモデル一覧に混ざる（LiteLLM の仕様。
 > router に deployment がある場合は一覧から除去されない）。選んでも動かないので、
 > Nucllei 管理画面でこのモデルを無効化（`is_active` トグル）しておく。DB に残るので一度だけでよい。
+
+### LiteLLM を挟むと失われるもの（2026-08-14 実測）
+
+**LiteLLM はストリームを素通しせず組み直す**。上流（特に sglang）の拡張は落ちるので、
+Nucllei 側のトークン表示に効いてくる。v1.82.3 と 1.96.2 のソースで確認した挙動:
+
+| 何 | 挙動 | 影響 |
+|---|---|---|
+| チャンクごとの累積 usage | `stream_options` は上流まで素通しするので **sglang は返している**が、LiteLLM が受信側で全チャンクから usage を削除し（`streaming_handler.py` の `# remove usage from chunk, only send on final chunk`）最後に自前で 1 個合成する。1.96 でも同じ | **生成中のライブ tok/s が出ない**（確定値の表示は出る） |
+| 最終 usage フレームの形 | sglang は `choices: []` の専用フレーム。LiteLLM の合成チャンクは `choices: [{"delta": {}}]` | Nucllei 側で対応済み（technoplasm/nucllei#112） |
+| `/v1/models` の context 長 | 1.82 は id/object/created/owned_by の 4 キーのみ。**1.96 から `max_input_tokens` を返す**（`model_info` の設定値が優先） | ゲージの分母。1.96 未満では出ない |
+| `usage.reasoning_tokens` | sglang 拡張。OpenAI 形の `completion_tokens_details.reasoning_tokens` に入れ替わる | 表示に使っていないので実害なし |
+
+いずれも config のノブでは変えられない（ハードコード）。**そのため kimi-k2.6 だけは
+`model_list` に載せず、`general_settings.pass_through_endpoints` の生 proxy
+(`/sglang`) で配信している** — pass-through は `aiter_bytes()` をそのまま流すだけなので
+sglang のストリームがバイト単位で無改変に届き、上の 4 つが全部そのまま効く。
+
+代償は LiteLLM の routing / spend tracking をこのモデルだけ通らないこと。認証（master key）と
+`:4000` 単一エントリは保たれる。設定の注意点（`auth: true` が必須である理由など）は
+`litellm/config.yaml` のコメントに書いてある。
 
 ### 使い方
 

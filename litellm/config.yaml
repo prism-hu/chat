@@ -79,19 +79,8 @@ model_list:
       api_base: http://llamacpp-step37:8000/v1
       api_key: dummy
 
-  # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
-  # Reached over the public internet (not in-network). 2026-07 に認証必須化された
-  # (api_key: dummy だと 401 Unauthorized)。キーは ~/chat/.env の KIMI_API_KEY。
-  - model_name: kimi-k2.6
-    litellm_params:
-      model: openai/kimi-k2.6
-      api_base: http://llens.med.hokudai.ac.jp:13300/v1
-      api_key: os.environ/KIMI_API_KEY
-      # Kimi K2.6 official recommended sampling (Thinking mode; this endpoint is a
-      # thinking model). temperature=1.0 / top_p=0.95. No official top_k. Refs:
-      # huggingface.co/moonshotai/Kimi-K2.6 , kimi-k2.org/blog/24-kimi-k2-6-release
-      temperature: 1.0
-      top_p: 0.95
+  # NOTE: kimi-k2.6 (Hokudai / llens, sglang) is deliberately NOT in model_list.
+  # It is served through the raw pass-through route below — see general_settings.
 
 litellm_settings:
   drop_params: true
@@ -100,3 +89,40 @@ litellm_settings:
   # installed on the host. Only affects wildcard entries; the explicit models above
   # are listed as-is. If Ollama is down, /v1/models falls back to a static list.
   check_provider_endpoint: true
+
+general_settings:
+  # --- Raw pass-through to the external sglang (Hokudai / llens, kimi-k2.6) ---
+  #
+  # Why not a normal model_list entry: LiteLLM does not proxy a stream, it takes it
+  # apart and rebuilds it, and sglang's usage extensions do not survive that.
+  # Specifically, litellm_core_utils/streaming_handler.py deletes `usage` from every
+  # chunk ("remove usage from chunk, only send on final chunk") and synthesizes a
+  # single usage chunk at the end, so Nucllei's live tok/s has nothing to read; and
+  # /v1/models drops sglang's `max_model_len`, so the context gauge loses its
+  # denominator. Neither is configurable — both are hardcoded (checked against
+  # v1.82.3 and 1.96.2).
+  #
+  # A pass-through route is a byte-for-byte proxy (streaming_handler.py just yields
+  # `response.aiter_bytes()`), so the sglang stream arrives at Nucllei intact.
+  # Requests are still authenticated with LITELLM_MASTER_KEY and still enter through
+  # :4000 — we only give up LiteLLM's routing/spend tracking for this one model.
+  #
+  # `include_subpath` makes /sglang/<x> map to <target>/<x>, so both
+  # /sglang/chat/completions and /sglang/models reach sglang. Methods default to
+  # GET/POST/PUT/DELETE/PATCH.
+  #
+  # `auth: true` is REQUIRED, not decorative: without it LiteLLM returns a blank
+  # UserAPIKeyAuth for the exact route and skips authentication entirely
+  # (proxy/auth/user_api_key_auth.py — `if endpoint.get("auth") is not True`).
+  # Port 4000 is reachable over Tailscale, so leaving it open is not acceptable.
+  #
+  # The client's Authorization header is NOT forwarded upstream (forward_headers
+  # defaults to false), so the master key stops at LiteLLM and sglang only ever sees
+  # KIMI_API_KEY from the header below.
+  pass_through_endpoints:
+    - path: "/sglang"
+      target: "http://llens.med.hokudai.ac.jp:13300/v1"
+      include_subpath: true
+      auth: true
+      headers:
+        Authorization: "Bearer os.environ/KIMI_API_KEY"
