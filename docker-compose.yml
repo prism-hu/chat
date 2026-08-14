@@ -16,16 +16,14 @@ services:
       - WEBUI_URL=https://chat.prism-hu.org
       # shipped locales: ja / en / zh-CN
       - DEFAULT_LOCALE=ja
-      # LiteLLM is the only host we talk to, but through TWO routes (`;`-separated):
-      #   /v1     — normal LiteLLM routing (Claude / vLLM / Ollama)
-      #   /sglang — raw pass-through to the external sglang (kimi-k2.6). LiteLLM
-      #             rebuilds streams and loses sglang's usage/context extensions, so
-      #             kimi bypasses routing to keep live tok/s and the context gauge.
-      #             Rationale in litellm/config.yaml (general_settings).
-      # Both carry the same master key; the pass-through swaps in KIMI_API_KEY upstream.
-      # Ollama is not wired up directly — it is a wildcard route in litellm/config.yaml.
-      - OPENAI_API_BASE_URLS=http://litellm:4000/v1;http://litellm:4000/sglang
-      - OPENAI_API_KEYS=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)};${LITELLM_MASTER_KEY}
+      # LiteLLM is the ONLY model source (Claude / vLLM / Ollama all come through it).
+      # Ollama is no longer wired up directly — it is a wildcard route in litellm/config.yaml.
+      #
+      # kimi-k2.6 を生 pass-through (/sglang) に分ける案は取り下げた。認証付き
+      # pass-through が LiteLLM Enterprise 限定で、無料版では proxy を定義した
+      # 時点で起動に失敗するため (litellm/config.yaml のコメント参照)。
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
       - ENABLE_OLLAMA_API=false
     ports:
       - "8080:8080"
