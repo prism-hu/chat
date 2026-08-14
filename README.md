@@ -95,6 +95,22 @@ curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <LITELLM_MASTER_K
 > router に deployment がある場合は一覧から除去されない）。選んでも動かないので、
 > Nucllei 管理画面でこのモデルを無効化（`is_active` トグル）しておく。DB に残るので一度だけでよい。
 
+### LiteLLM を挟むと失われるもの（2026-08-14 実測 / v1.82.3）
+
+**LiteLLM はストリームを素通しせず組み直す**。上流（特に sglang）の拡張は落ちるので、
+Nucllei 側のトークン表示に効いてくる。ソースで確認した挙動:
+
+| 何 | 挙動 | 影響 |
+|---|---|---|
+| チャンクごとの累積 usage | `stream_options` は上流まで素通しするので **sglang は返している**が、LiteLLM が受信側で全チャンクから usage を削除し（`streaming_handler.py` の `# remove usage from chunk, only send on final chunk`）最後に自前で 1 個合成する。1.96 でも同じ | **生成中のライブ tok/s が出ない**（確定値の表示は出る） |
+| 最終 usage フレームの形 | sglang は `choices: []` の専用フレーム。LiteLLM の合成チャンクは `choices: [{"delta": {}}]` | Nucllei 側で対応済み（technoplasm/nucllei#112） |
+| `/v1/models` の context 長 | 1.82 は id/object/created/owned_by の 4 キーのみ。**1.96 から `max_input_tokens` を返す**（`model_info` の設定値が優先） | 上記のとおり `model_info.max_input_tokens` を設定済み。効くのは 1.96 以降 |
+| `usage.reasoning_tokens` | sglang 拡張。OpenAI 形の `completion_tokens_details.reasoning_tokens` に入れ替わる | 表示に使っていないので実害なし |
+
+いずれも config のノブでは変えられない（ハードコード）。**生ストリームが要るなら**
+`general_settings.pass_through_endpoints` で raw proxy を生やす手がある
+（`aiter_bytes()` をそのまま流すのでバイト単位で無改変）。今は入れていない。
+
 ### 使い方
 
 ```python

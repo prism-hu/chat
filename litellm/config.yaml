@@ -45,6 +45,13 @@ model_list:
       # huggingface.co/moonshotai/Kimi-K2.6 , kimi-k2.org/blog/24-kimi-k2-6-release
       temperature: 1.0
       top_p: 0.95
+    # Context length. sglang advertises this as `max_model_len` on its own
+    # /v1/models, but that is an sglang extension and LiteLLM does not forward it.
+    # LiteLLM >= 1.96 puts `max_input_tokens` on /v1/models and prefers what is
+    # configured here (router.get_configured_token_limits), so this is what makes
+    # Nucllei's context gauge show a denominator. Ignored by older LiteLLM.
+    model_info:
+      max_input_tokens: 262144
 
 litellm_settings:
   drop_params: true
