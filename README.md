@@ -12,6 +12,8 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 - Ollama (ホスト実行)
 - LiteLLM
 - vLLM (Qwen3.5-122B, DGX Spark SM121 最適化 / `vendor/qwen35-spark` submodule)
+- vLLM (Qwen3.6-35B-A3B, NVFP4 / 上流公式イメージ) — 35B MoE の VLM。
+  実測 78.5 t/s で ollama の同モデルより +38%。[`docs/qwen36-vllm.md`](docs/qwen36-vllm.md)
 - llama.cpp (Step-3.7-Flash 198B MoE VLM, GGUF IQ4_XS / `llamacpp/Dockerfile`)
   — **vLLM の Qwen3.5 とは排他**（105GB + 100GB で 128GB に収まらない）。
   切り替え手順とチューニングは [`docs/step37-llamacpp.md`](docs/step37-llamacpp.md)
@@ -81,6 +83,7 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 | `claude-opus-4-6` | Anthropic API | Claude Opus 4.6 |
 | `claude-sonnet-4-6` | Anthropic API | Claude Sonnet 4.6 |
 | `qwen3.5-122b-custom` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
+| `qwen3.6-35b` | vLLM (上流公式 / NVFP4) | Qwen3.6 35B-A3B（MoE VLM / vision / 78.5 tok/s）。詳細 [docs/qwen36-vllm.md](docs/qwen36-vllm.md) |
 | `kimi-k2.6` | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:13300/v1` に直結（公開経路・API キー不要）。Kimi K2.6 |
 | `ollama/<name>` | Ollama (ホスト実行) | ワイルドカード。ホストに入っているモデルが自動で並ぶ（下記） |
 

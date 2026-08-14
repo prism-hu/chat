@@ -64,6 +64,24 @@ model_list:
       presence_penalty: 1.5
       extra_body: {"top_k": 20}
 
+  # --- vLLM NVFP4 (DGX Spark SM121), served by the vllm-qwen36 service ---
+  # Qwen3.6-35B-A3B (35B MoE / active 3B / vision / ctx 262144)。
+  # 思考モードの推奨サンプリング (model card)。vLLM 側の
+  # --override-generation-config と同じ値をここにも置いて、経路によらず揃える。
+  # コード用途は temperature 0.6 / presence_penalty 0.0 が推奨なので、
+  # 常用するなら model_name: qwen3.6-35b-coder を別エントリで足す。
+  # 思考を切りたいときは extra_body の chat_template_kwargs に
+  # {"enable_thinking": false} を渡す。
+  - model_name: qwen3.6-35b
+    litellm_params:
+      model: openai/qwen36
+      api_base: http://vllm-qwen36:8000/v1
+      api_key: dummy
+      temperature: 1.0
+      top_p: 0.95
+      presence_penalty: 1.5
+      extra_body: {"top_k": 20}
+
   # --- llama.cpp (DGX Spark GB10), served by the llamacpp-step37 service ---
   # Step-3.7-Flash (198B MoE VLM / GGUF IQ4_XS)。vllm-qwen35 とは排他なので、
   # 片方を止めてもう片方を上げる運用。止まっている側はここに残っていても

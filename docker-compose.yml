@@ -94,6 +94,74 @@ services:
               capabilities: [gpu]
     restart: always
 
+  # Qwen3.6-35B-A3B (NVFP4) — 総 35B / アクティブ 3B の MoE VLM。vision + tools +
+  # thinking、ctx 262144。アーキテクチャは Qwen3.5 と同一
+  # (Qwen3_5MoeForConditionalGeneration) だが、**vllm-qwen35 のカスタムイメージでは
+  # 動かない** (下記)。実測 decode 78.5 t/s = ollama の Q4_K_M (57 t/s) の +38%。
+  #
+  # 重みは NVIDIA 公式 NVFP4 (modelopt MIXED_PRECISION) で 20.4GiB + FP8 KV:
+  #   hf download nvidia/Qwen3.6-35B-A3B-NVFP4 --local-dir ~/models/qwen36-35b-a3b-nvfp4
+  #
+  # vllm-qwen35 / llamacpp-step37 とは排他 (GPU を丸ごと使う)。ただし本体が軽いので
+  # gpu-memory-utilization を絞ってあり、ホストの ollama とは同居できる。
+  # 計測値・不採用にした選択肢の記録: docs/qwen36-vllm.md
+  vllm-qwen36:
+    # 上流公式イメージ。arm64 マニフェストあり、CUDA 13.0 / torch 2.11。
+    # arch_list は sm_120 までだが GB10 (cc 12.1) で動くことを実機確認済み
+    # (Blackwell は sm_120 の cubin が sm_121 で動く)。
+    #
+    # カスタム SM121 ビルド (ghcr.io/prism-hu/vllm-qwen35-v2, 0.19.1.dev0) は
+    # NVFP4 の MoE を読めず `KeyError: layers.0.mlp.experts.w2_input_scale` で落ちる。
+    # NGC 版 (nvcr.io/nvidia/vllm:26.07-py3, 0.24.0) は動くが decode が遅く
+    # (76.8 t/s)、DSpark スペキュレータにも非対応。上流が最良。
+    image: ${VLLM_QWEN36_IMAGE:-vllm/vllm-openai:v0.26.0}
+    pull_policy: missing
+    container_name: vllm-qwen36
+    ipc: host
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+    volumes:
+      - ${MODELS_DIR:-./models}:/models
+    # !! このイメージの ENTRYPOINT は ["vllm","serve"] !! カスタムイメージ (["vllm"])
+    # と違い `serve` を書くと `vllm serve serve ...` になって起動しない。
+    command:
+      - --model=${QWEN36_MODEL_PATH:-/models/qwen36-35b-a3b-nvfp4}
+      - --served-model-name=qwen36
+      - --port=8000
+      - --max-model-len=262144
+      # 重み 20.4GiB。0.55 で vLLM が ~67GiB 確保し、うち ~40GiB が KV cache
+      # (FP8 KV なので 300万トークン超が載る = 262144 の 11 並列以上)。
+      # 残り ~55GiB はホストの ollama 用に空けてある。単独で使い切るなら 0.85。
+      - --gpu-memory-utilization=0.55
+      # NVFP4 チェックポイントは hf_quant_config に kv_cache_quant_algo=FP8 を持つ。
+      # 明示すると KV が FP8 で確保され、同じメモリで倍のコンテキストが載る。
+      - --kv-cache-dtype=fp8
+      - --reasoning-parser=qwen3
+      - --enable-auto-tool-choice
+      # Qwen3.6 の推奨は qwen3_coder (Qwen3.5 の qwen3_xml とは別物。model card 準拠)
+      - --tool-call-parser=qwen3_coder
+      - --generation-config=auto
+      # Qwen3.6 thinking モードの推奨サンプリング (model card)。
+      # コード用途は temperature 0.6 / presence_penalty 0.0 が推奨なので、
+      # そちらはリクエスト側で上書きする。
+      - '--override-generation-config={"temperature":1.0,"top_p":0.95,"top_k":20,"presence_penalty":1.5}'
+      - --attention-backend=FLASHINFER
+      # 投機デコードは無し。公式チェックポイント (base / FP8 / NVFP4) の config に
+      # num_nextn_predict_layers が無く MTP 重みが同梱されていない。DGX Spark 専用の
+      # RedHatAI/Qwen3.6-35B-A3B-speculator.dspark も試したが、NVFP4 ベースだと
+      # ドラフト生成で CUDA device-side assert (docs/qwen36-vllm.md)。
+      #
+      # --kernel-config '{"moe_backend":"flashinfer_b12x"}' で SM121 ネイティブ FP4 の
+      # MoE カーネルを使えるが、decode は帯域律速なので効果なし (78.4 対 78.5 t/s)。
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: "no"
+
   # Step-3.7-Flash (StepFun, 198B MoE VLM / active ~11B / vision あり) を llama.cpp で。
   # 量子化は公式 GGUF IQ4_XS (105GB) + mmproj f16 (4GB)。モデルは host 側に置く:
   #   hf download stepfun-ai/Step-3.7-Flash-GGUF --include "IQ4_XS/*" \
@@ -128,15 +196,16 @@ services:
     command:
       - --model
       - ${STEP37_MODEL_PATH:-/models/step37-flash-iq4xs/IQ4_XS/Step-3.7-flash-IQ4_XS-00001-of-00003.gguf}
+      # vision (mmproj)。このモデルを置いておく理由が vision なので有効にしてある。
       # !! vision (mmproj) と MTP は排他 !!
       #    両方有効にすると画像を投げた瞬間に 500
       #    (`decode() failed: failed to process speculative batch`)。
       #    common_speculative_process() が全バッチに対して走る一方、MTP ドラフトは
       #    画像埋め込み (token でなく embd の batch) を処理できないため。設定では
       #    回避不可 (リクエスト単位の speculative.n_max: 0 でも同じ)。
-      #    vision を使いたいときは下 2 行を戻して --spec-* 4 行を消す (decode -30%)。
-      # - --mmproj
-      # - ${STEP37_MMPROJ_PATH:-/models/step37-flash-iq4xs/mmproj-step3.7-flash-f16.gguf}
+      #    速度を取るなら下 2 行を消して --spec-* 4 行のコメントを外す (decode +30%)。
+      - --mmproj
+      - ${STEP37_MMPROJ_PATH:-/models/step37-flash-iq4xs/mmproj-step3.7-flash-f16.gguf}
       - --alias
       - step37
       - --host
@@ -160,21 +229,23 @@ services:
       - --parallel
       - "1"
       - --no-mmap
-      # MTP (Multi-Token Prediction) 投機デコード。ドラフト重み Q8_0 で +3.7GB。
+      # MTP (Multi-Token Prediction) 投機デコード。decode +30% だが上の vision と
+      # 排他なので今は無効。使うときは上の --mmproj 2 行を消してここを戻す。
+      # ドラフト重み Q8_0 で +3.7GB。
       # !! StepFun 公式の Step3.7-flash-mtp-Q8_0.gguf は使えない !!
       #    fork の llama.cpp では `missing tensor 'blk.0.attn_norm.weight'` で
       #    起動に失敗する。MTP-tail のドラフト読み込みに対応しているのは上流
       #    master 側で、ドラフトも notSnix のものを使う (docs/step37-llamacpp.md)。
-      - --spec-type
-      - draft-mtp
-      - --spec-draft-model
-      - ${STEP37_MTP_PATH:-/models/step37-flash-iq4xs/Step-3.7-Flash-MTP-Q8_0.gguf}
+      # - --spec-type
+      # - draft-mtp
+      # - --spec-draft-model
+      # - ${STEP37_MTP_PATH:-/models/step37-flash-iq4xs/Step-3.7-Flash-MTP-Q8_0.gguf}
       # notSnix がスイープして出した推奨値。n-max を上げすぎると外れたときの
       # やり直しコストで逆に遅くなる。
-      - --spec-draft-n-max
-      - "2"
-      - --spec-draft-p-min
-      - "0.60"
+      # - --spec-draft-n-max
+      # - "2"
+      # - --spec-draft-p-min
+      # - "0.60"
       # チャットテンプレートは GGUF 内蔵。--jinja がないと tool call も
       # reasoning_effort も効かないので必須。
       - --jinja
