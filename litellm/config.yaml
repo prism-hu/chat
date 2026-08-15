@@ -51,80 +51,10 @@ model_list:
       model: ollama/*
       api_base: http://172.28.0.1:11434
 
-  # --- vLLM custom build (DGX Spark SM121), served by the vllm-qwen35 service ---
-  - model_name: qwen3.5-122b-custom
-    litellm_params:
-      model: openai/qwen
-      api_base: http://vllm-qwen35:8000/v1
-      api_key: dummy
-      # Qwen3.5 thinking-mode recommended sampling (HF model card) — mirrors the
-      # vLLM `--override-generation-config`. top_k is non-OpenAI → extra_body.
-      temperature: 1.0
-      top_p: 0.95
-      presence_penalty: 1.5
-      extra_body: {"top_k": 20}
-
-  # --- vLLM NVFP4 (DGX Spark SM121), served by the vllm-qwen36 service ---
-  # Qwen3.6-35B-A3B (35B MoE / active 3B / vision / ctx 262144)。
-  # 思考モードの推奨サンプリング (model card)。vLLM 側の
-  # --override-generation-config と同じ値をここにも置いて、経路によらず揃える。
-  # コード用途は temperature 0.6 / presence_penalty 0.0 が推奨なので、
-  # 常用するなら model_name: qwen3.6-35b-coder を別エントリで足す。
-  # 思考を切りたいときは extra_body の chat_template_kwargs に
-  # {"enable_thinking": false} を渡す。
-  - model_name: qwen3.6-35b
-    litellm_params:
-      model: openai/qwen36
-      api_base: http://vllm-qwen36:8000/v1
-      api_key: dummy
-      temperature: 1.0
-      top_p: 0.95
-      presence_penalty: 1.5
-      extra_body: {"top_k": 20}
-
-  # --- llama.cpp (DGX Spark GB10), served by the llamacpp-step37 service ---
-  # Step-3.7-Flash (198B MoE VLM / GGUF IQ4_XS)。vllm-qwen35 とは排他なので、
-  # 片方を止めてもう片方を上げる運用。止まっている側はここに残っていても
-  # /v1/models には並ぶが、リクエストは接続エラーになる。
-  #
-  # 推論深度は chat template の変数 `reasoning_effort` (low|medium|high、既定 medium)。
-  # llama.cpp では OpenAI の reasoning_effort ではなく chat_template_kwargs で渡す。
-  # 常時 high が欲しければ、この下に model_name: step-3.7-flash-high として
-  # extra_body: {"chat_template_kwargs": {"reasoning_effort": "high"}} 付きで足す。
-  - model_name: step-3.7-flash
-    litellm_params:
-      model: openai/step37
-      api_base: http://llamacpp-step37:8000/v1
-      api_key: dummy
-
-  # --- External OpenAI-compatible endpoint (Hokudai / llens, sglang: kimi-k2.6) ---
-  # Reached over the public internet (not in-network). 2026-07 に認証必須化された
-  # (api_key: dummy だと 401 Unauthorized)。キーは ~/chat/.env の KIMI_API_KEY。
-  #
-  # 一度 general_settings.pass_through_endpoints の生 proxy (/sglang) に移したが、
-  # **`auth: true` が LiteLLM Enterprise 限定**で、無料版では proxy 自体が
-  # `ValueError: You must be a LiteLLM Enterprise user` で起動に失敗する。
-  # auth を外せば起動はするが、:4000 は Tailscale に出ているので無認証の
-  # 生 proxy は置けない (KIMI_API_KEY で誰でも上流を叩けてしまう)。
-  # → 通常の model_list に戻した。代償は README「LiteLLM を挟むと失われるもの」の
-  #    とおり (ライブ tok/s が出ない)。Enterprise ライセンスを入れるなら再検討する。
-  - model_name: kimi-k2.6
-    litellm_params:
-      model: openai/kimi-k2.6
-      api_base: http://llens.med.hokudai.ac.jp:13300/v1
-      api_key: os.environ/KIMI_API_KEY
-      # Kimi K2.6 official recommended sampling (Thinking mode; this endpoint is a
-      # thinking model). temperature=1.0 / top_p=0.95. No official top_k. Refs:
-      # huggingface.co/moonshotai/Kimi-K2.6 , kimi-k2.org/blog/24-kimi-k2-6-release
-      temperature: 1.0
-      top_p: 0.95
-    # Context length. sglang advertises this as `max_model_len` on its own
-    # /v1/models, but that is an sglang extension and LiteLLM does not forward it.
-    # LiteLLM >= 1.96 puts `max_input_tokens` on /v1/models and prefers what is
-    # configured here (router.get_configured_token_limits), so this is what makes
-    # Nucllei's context gauge show a denominator. Ignored by older LiteLLM.
-    model_info:
-      max_input_tokens: 262144
+  # NOTE: OpenAI 互換の上流 (vLLM qwen3.5/3.6, llama.cpp step37, sglang kimi) は
+  # ここには載せない。prism-gw が直接・無改変で中継する (gateway/config.yaml)。
+  # LiteLLM を通すと /v1/models の `max_model_len` とストリーム中の累積 usage が
+  # 消えるため。ここに戻すなら gateway/config.yaml の該当ルートを外すこと。
 
 litellm_settings:
   drop_params: true

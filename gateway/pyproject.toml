@@ -1,0 +1,14 @@
+[project]
+name = "prism-gw"
+version = "0.1.0"
+description = "OpenAI 互換の透過ゲートウェイ。応答を組み直さないことだけが仕事。"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28",
+    "pyyaml>=6.0",
+    "starlette>=0.47",
+    "uvicorn>=0.36",
+]
+
+[tool.uv]
+package = false
