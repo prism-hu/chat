@@ -108,9 +108,8 @@ curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <PRISM_GW_API_KEY
   | python3 -c 'import sys,json;[print(m["id"]) for m in json.load(sys.stdin)["data"]]'
 ```
 
-> 既知の癖: ワイルドカード定義そのもの (`ollama/*`) もモデル一覧に混ざる（LiteLLM の仕様。
-> router に deployment がある場合は一覧から除去されない）。選んでも動かないので、
-> Nucllei 管理画面でこのモデルを無効化（`is_active` トグル）しておく。DB に残るので一度だけでよい。
+> LiteLLM はワイルドカード定義そのもの (`ollama/*`) も一覧に混ぜてくるが（選んでも動かない）、
+> prism-gw が `include.exclude` で落とすので出てこない（`gateway/config.yaml`）。
 
 ### 使い方
 
