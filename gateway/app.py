@@ -83,7 +83,7 @@ def load_config() -> Config:
         raw = _expand(yaml.safe_load(f))
     cfg = Config(raw)
     if not cfg.key:
-        raise RuntimeError("auth.key が空。GATEWAY_KEY を設定すること。")
+        raise RuntimeError("auth.key が空。PRISM_GW_API_KEY を設定すること。")
     log.info(
         "loaded %d upstream(s), %d declared model(s), %d include(s)",
         len(cfg.upstreams), len(cfg.routes), len(cfg.includes),

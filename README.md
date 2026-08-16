@@ -72,7 +72,7 @@ Docker ネットワーク (`chat_default`) のサブネットは `docker-compose
 Tailscale経由でOpenAI互換APIとして利用可能。
 
 **エンドポイント:** `http://<HOST>:4000/v1`（prism-gw。LiteLLM は後ろに隠れている）
-**APIキー:** `.env` の `LITELLM_MASTER_KEY`（= `GATEWAY_KEY` の既定値）
+**APIキー:** `.env` の `PRISM_GW_API_KEY`（**このスタックで唯一のキー**。全モデルに到達できる）
 
 ### 利用可能なモデル
 

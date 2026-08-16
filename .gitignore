@@ -10,3 +10,6 @@ artifacts/*
 !artifacts/README.md
 
 _links/
+
+# .env のバックアップ (鍵が入っている)
+.env.bak*
