@@ -23,7 +23,7 @@ services:
       # pass-through が LiteLLM Enterprise 限定で、無料版では proxy を定義した
       # 時点で起動に失敗するため (litellm/config.yaml のコメント参照)。
       - OPENAI_API_BASE_URL=http://prism-gw:4000/v1
-      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
+      - OPENAI_API_KEY=${PRISM_GW_API_KEY:?Set PRISM_GW_API_KEY in .env (see .env.example)}
       - ENABLE_OLLAMA_API=false
     ports:
       - "8080:8080"
@@ -36,7 +36,7 @@ services:
       - prism-gw
     restart: always
 
-  # prism-gw — 唯一の入口 (:4000)。クライアントのキーは GATEWAY_KEY の 1 本だけ。
+  # prism-gw — 唯一の入口 (:4000)。クライアントのキーは PRISM_GW_API_KEY の 1 本だけ。
   #
   # 仕事は「組み直さないこと」。ボディの model を見て上流を決め、ヘッダの認証だけ
   # 差し替えて本文はバイトのまま流す。これにより sglang/vLLM の `max_model_len` と
@@ -53,11 +53,12 @@ services:
       - "4000:4000"
     environment:
       - TZ=${TZ:-Asia/Tokyo}
-      # クライアントが名乗るキー。既定で LiteLLM の master key を流用するので、
-      # 既存のクライアント (fugu / 外部) は無変更で通る。
-      - GATEWAY_KEY=${GATEWAY_KEY:-${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}}
+      # **このスタックで唯一クライアントに渡すキー。** これ 1 本で全モデルに到達できる。
+      - PRISM_GW_API_KEY=${PRISM_GW_API_KEY:?Set PRISM_GW_API_KEY in .env (see .env.example)}
       # 上流に差し替えるキー。クライアントには出ない。
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      # LiteLLM はホスト非公開なので master key も同じ値を流用する
+      # (別にしたいときだけ .env に LITELLM_MASTER_KEY を書く)。
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-${PRISM_GW_API_KEY}}
       - KIMI_API_KEY=${KIMI_API_KEY:-}
     volumes:
       # マウントしておくと config 編集 → restart だけで反映される (再ビルド不要)
@@ -81,7 +82,8 @@ services:
     command: ["--config", "/app/litellm/config.yaml"]
     environment:
       - TZ=${TZ:-Asia/Tokyo}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
+      # prism-gw の後ろにしか居ないので、既定でゲートウェイのキーを流用する。
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-${PRISM_GW_API_KEY:?Set PRISM_GW_API_KEY in .env (see .env.example)}}
       - CLAUDE_OAUTH_TOKEN=${CLAUDE_OAUTH_TOKEN:?Set CLAUDE_OAUTH_TOKEN in .env (see .env.example)}
       # kimi-k2.6 (llens) のみが使う。未設定でも他モデルは動くので必須にはしない。
       - KIMI_API_KEY=${KIMI_API_KEY:-}

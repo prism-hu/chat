@@ -4,7 +4,7 @@
 ゲートウェイ。`gateway/app.py`（Python / 約 250 行）と `gateway/config.yaml` だけ。
 
 ```
-Nucllei / fugu / 外部 ──(GATEWAY_KEY 1本)──> prism-gw :4000 /v1
+Nucllei / fugu / 外部 ──(PRISM_GW_API_KEY 1本)──> prism-gw :4000 /v1
                                                ├─ kimi-k2.6       → sglang (llens)   透過
                                                ├─ qwen3.6-35b     → vLLM             透過
                                                ├─ qwen3.5-122b-custom → vLLM         透過
@@ -42,7 +42,7 @@ LiteLLM には認証付きの生 pass-through 機能があるが **Enterprise �
 
 ## 仕組み
 
-- **認証**: `auth.key`（既定で `LITELLM_MASTER_KEY` を流用）と Bearer を突き合わせる。
+- **認証**: `auth.key`（= `PRISM_GW_API_KEY`）と Bearer を突き合わせる。
   上流のキー（`KIMI_API_KEY` 等）はここで差し替わり、**クライアントには出ない**
 - **ルーティング**: リクエストボディの `model` を見て上流を決める。パスは `/v1` のまま
   なので、**Nucllei に登録する OpenAI エンドポイントは 1 個で済む**
@@ -60,7 +60,7 @@ LiteLLM には認証付きの生 pass-through 機能があるが **Enterprise �
 
 ```yaml
 auth:
-  key: ${GATEWAY_KEY}
+  key: ${PRISM_GW_API_KEY}
 
 upstreams:
   sglang-llens:
@@ -107,7 +107,7 @@ OpenAI 互換な上流（vLLM / sglang / llama.cpp）は **LiteLLM に載せな�
 ## 動作確認
 
 ```bash
-K=$(grep '^LITELLM_MASTER_KEY=' .env | cut -d= -f2-)
+K=$(grep '^PRISM_GW_API_KEY=' .env | cut -d= -f2-)
 
 # 統合された一覧（全モデルに max_model_len が付く）
 curl -s localhost:4000/v1/models -H "Authorization: Bearer $K" \
@@ -132,5 +132,5 @@ curl -s -N localhost:4000/v1/chat/completions -H "Authorization: Bearer $K" \
 - **Ollama のモデルは `max_model_len` が付かない。** LiteLLM のワイルドカード経路が
   返さないため。必要なら `include` に `context_overrides` を足す余地はある
 - キー 1 本で全モデルに到達できる = **そのキーが漏れれば全部使われる**。これは
-  LiteLLM master key 時代と同じ性質で、悪化はしていない。モデル別に絞りたくなったら
+  LiteLLM master key 時代と同じ性質で（値も同一のまま移行した）、悪化はしていない。モデル別に絞りたくなったら
   `auth` を複数キー + 許可モデル一覧に拡張する（数十行で足りる）

@@ -10,16 +10,18 @@
 #
 # ${VAR} は環境変数に展開される。${VAR:-既定値} も使える。
 
-# クライアントが名乗るキー。これ 1 本で下の全モデルに到達できる。
+# クライアントが名乗るキー。**これ 1 本で下の全モデルに到達できる。**
 # 上流のキー (KIMI_API_KEY 等) はここで差し替わり、クライアントには出ない。
 auth:
-  key: ${GATEWAY_KEY}
+  key: ${PRISM_GW_API_KEY}
 
 upstreams:
   # 変換が必要なもの (Anthropic / OpenAI) と Ollama のワイルドカード列挙を担当。
   # ここだけは素通しにできない (形式変換が要る) ので、LiteLLM の制約を引き継ぐ。
   litellm:
     base_url: http://litellm:4000/v1
+    # compose が必ず値を渡す (未設定なら PRISM_GW_API_KEY を流用する)。
+    # ここで入れ子の既定値は書かない — app.py の展開は入れ子に対応していない。
     api_key: ${LITELLM_MASTER_KEY}
 
   # 北大 llens。sglang は continuous_usage_stats に対応しているので有効化する。
