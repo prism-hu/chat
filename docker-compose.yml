@@ -22,7 +22,7 @@ services:
       # kimi-k2.6 を生 pass-through (/sglang) に分ける案は取り下げた。認証付き
       # pass-through が LiteLLM Enterprise 限定で、無料版では proxy を定義した
       # 時点で起動に失敗するため (litellm/config.yaml のコメント参照)。
-      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_BASE_URL=http://prism-gw:4000/v1
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}
       - ENABLE_OLLAMA_API=false
     ports:
@@ -33,14 +33,51 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      - prism-gw
+    restart: always
+
+  # prism-gw — 唯一の入口 (:4000)。クライアントのキーは GATEWAY_KEY の 1 本だけ。
+  #
+  # 仕事は「組み直さないこと」。ボディの model を見て上流を決め、ヘッダの認証だけ
+  # 差し替えて本文はバイトのまま流す。これにより sglang/vLLM の `max_model_len` と
+  # ストリーム中の累積 usage (= ライブ tok/s) が生きたまま届く。
+  # LiteLLM も Bifrost も組み直すので両方とも消える (実測: docs/gateway.md)。
+  #
+  # ルーティングは gateway/config.yaml に宣言的に書く。編集したら restart するだけ。
+  prism-gw:
+    image: prism-gw:local
+    build:
+      context: ./gateway
+    container_name: prism-gw
+    ports:
+      - "4000:4000"
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+      # クライアントが名乗るキー。既定で LiteLLM の master key を流用するので、
+      # 既存のクライアント (fugu / 外部) は無変更で通る。
+      - GATEWAY_KEY=${GATEWAY_KEY:-${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env (see .env.example)}}
+      # 上流に差し替えるキー。クライアントには出ない。
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
+    volumes:
+      # マウントしておくと config 編集 → restart だけで反映される (再ビルド不要)
+      - ./gateway/config.yaml:/app/config.yaml:ro
+    depends_on:
       - litellm
     restart: always
 
+  # 形式変換が要るもの (Anthropic / OpenAI) と Ollama のワイルドカード列挙だけを担当。
+  # OpenAI 互換な上流 (vLLM / sglang / llama.cpp) は prism-gw が素通しするので
+  # ここには載せない (LiteLLM を通すと max_model_len と累積 usage が消えるため)。
+  #
+  # **ホストには公開しない。** 入口は prism-gw の :4000 一本。
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    # !! main-stable / main-latest は 1.82 系で止まっている (2026-08 時点) !!
+    # 1.82 の /v1/models は id/object/created/owned_by の 4 キーしか返さず、
+    # model_info を書いてもコンテキスト長が出ない。**1.96 から max_input_tokens /
+    # max_output_tokens を返す**ので、版を明示的にピンする。
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:v1.96.2}
     container_name: litellm
-    ports:
-      - "4000:4000"
     command: ["--config", "/app/litellm/config.yaml"]
     environment:
       - TZ=${TZ:-Asia/Tokyo}

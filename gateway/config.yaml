@@ -1,0 +1,77 @@
+# prism-gw — OpenAI 互換の透過ゲートウェイ
+#
+# 目的は 3 つだけ:
+#   1. 入口を :4000 の /v1 一本に統一し、クライアントのキーを 1 本にする
+#   2. 上流の応答を **組み直さずバイトのまま**返す
+#      (LiteLLM も Bifrost も組み直すため、sglang/vLLM の `max_model_len` と
+#       ストリーム中の累積 usage が消える。docs/gateway.md に実測あり)
+#   3. /v1/models を 1 つに統合し、全モデルに `max_model_len` を持たせる
+#      (Nucllei のコンテキストゲージはこのキーだけを見る)
+#
+# ${VAR} は環境変数に展開される。${VAR:-既定値} も使える。
+
+# クライアントが名乗るキー。これ 1 本で下の全モデルに到達できる。
+# 上流のキー (KIMI_API_KEY 等) はここで差し替わり、クライアントには出ない。
+auth:
+  key: ${GATEWAY_KEY}
+
+upstreams:
+  # 変換が必要なもの (Anthropic / OpenAI) と Ollama のワイルドカード列挙を担当。
+  # ここだけは素通しにできない (形式変換が要る) ので、LiteLLM の制約を引き継ぐ。
+  litellm:
+    base_url: http://litellm:4000/v1
+    api_key: ${LITELLM_MASTER_KEY}
+
+  # 北大 llens。sglang は continuous_usage_stats に対応しているので有効化する。
+  sglang-llens:
+    base_url: http://llens.med.hokudai.ac.jp:13300/v1
+    api_key: ${KIMI_API_KEY:-}
+    # ストリーム中の累積 usage を上流に要求する。クライアントが
+    # stream_options を送らなくてもゲートウェイが差し込む = ライブ tok/s が出る。
+    force_continuous_usage: true
+
+  vllm-qwen36:
+    base_url: http://vllm-qwen36:8000/v1
+    force_continuous_usage: true
+
+  vllm-qwen35:
+    base_url: http://vllm-qwen35:8000/v1
+    force_continuous_usage: true
+
+  llamacpp-step37:
+    base_url: http://llamacpp-step37:8000/v1
+
+# --- 明示ルート ---
+# name: クライアントから見えるモデル名 / upstream_model: 上流での実名
+# context を書かなければ上流の /v1/models の max_model_len をそのまま使う。
+models:
+  - name: kimi-k2.6
+    upstream: sglang-llens
+
+  - name: qwen3.6-35b
+    upstream: vllm-qwen36
+    upstream_model: qwen36
+
+  # 停止中のサービス。上流に繋がらない間は /v1/models から自動的に外れる。
+  - name: qwen3.5-122b-custom
+    upstream: vllm-qwen35
+    upstream_model: qwen
+  - name: step-3.7-flash
+    upstream: llamacpp-step37
+    upstream_model: step37
+    # llama.cpp は max_model_len を返さないので明示する (compose の --ctx-size と揃える)
+    context: 65536
+
+# --- 取り込みルート ---
+# 上流の /v1/models をそのまま自分の一覧に載せる。`ollama pull` したものが
+# 設定変更なしで出てくるのはこの経路。
+include:
+  - upstream: litellm
+    # LiteLLM 1.96+ は max_input_tokens を返すので max_model_len に読み替える。
+    context_from: [max_model_len, max_input_tokens]
+    # 一覧に出さないもの。**完全一致**なので `ollama/*` は
+    # ワイルドカード定義そのものだけを落とし、配下の実モデルは残る。
+    # (パターンで消したいときは exclude_glob)
+    exclude: ["ollama/*"]
+    # 上で明示ルートを持つモデルは重複するので取り込まない
+    skip_declared: true

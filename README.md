@@ -8,6 +8,8 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 
 ## スタック
 
+- prism-gw — **唯一の入口 (`:4000`)**。キー 1 本で全モデルをゲートし、上流の応答を
+  組み直さずに中継する（`gateway/` / [`docs/gateway.md`](docs/gateway.md)）
 - Nucllei — フロントエンド。Open WebUI フォーク（technoplasm）/ `vendor/nucllei` submodule
 - Ollama (ホスト実行)
 - LiteLLM
@@ -69,8 +71,8 @@ Docker ネットワーク (`chat_default`) のサブネットは `docker-compose
 
 Tailscale経由でOpenAI互換APIとして利用可能。
 
-**エンドポイント:** `http://<HOST>:4000/v1`
-**APIキー:** `.env` の `LITELLM_MASTER_KEY`
+**エンドポイント:** `http://<HOST>:4000/v1`（prism-gw。LiteLLM は後ろに隠れている）
+**APIキー:** `.env` の `LITELLM_MASTER_KEY`（= `GATEWAY_KEY` の既定値）
 
 ### 利用可能なモデル
 
@@ -80,15 +82,19 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 外部 API (`:4000`) で使えるモデル**である点は変わらない（ただし kimi だけ `/v1` ではなく
 `/sglang` 配下 — 理由は[下記](#litellm-を挟むと失われるもの2026-08-14-実測)）。
 
-| model_name | ルート | バックエンド | 内容 |
+| model_name | 経路 | バックエンド | 内容 |
 |---|---|---|---|
-| `claude-opus-4-6` | `/v1` | Anthropic API | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | `/v1` | Anthropic API | Claude Sonnet 4.6 |
-| `qwen3.5-122b-custom` | `/v1` | カスタム vLLM (SM121) | Qwen3.5 122B-A10B（INT4+FP8 hybrid / MTP-2 / ~52 tok/s）。詳細 [docs/qwen35-vllm.md](docs/qwen35-vllm.md) |
-| `qwen3.6-35b` | `/v1` | vLLM (上流公式 / NVFP4) | Qwen3.6 35B-A3B（MoE VLM / vision / 78.5 tok/s）。詳細 [docs/qwen36-vllm.md](docs/qwen36-vllm.md) |
-| `step-3.7-flash` | `/v1` | llama.cpp (GGUF IQ4_XS) | Step-3.7-Flash 198B-A11B（MoE VLM / vision / 26.5 tok/s）。**通常は停止中**。詳細 [docs/step37-llamacpp.md](docs/step37-llamacpp.md) |
-| `ollama/<name>` | `/v1` | Ollama (ホスト実行) | ワイルドカード。ホストに入っているモデルが自動で並ぶ（下記） |
-| `kimi-k2.6` | **`/sglang`** | 外部 OpenAI 互換（北大 llens, sglang） | `http://llens.med.hokudai.ac.jp:13300/v1` への**生 pass-through**。認証は同じ master key |
+| `claude-opus-4-6` | LiteLLM | Anthropic API | Claude Opus 4.6 |
+| `claude-sonnet-4-6` | LiteLLM | Anthropic API | Claude Sonnet 4.6 |
+| `gpt-5.6-luna` / `-terra` / `-sol` | LiteLLM | OpenAI 公式 API | 下位/中位/フラッグシップ |
+| `ollama/<name>` | LiteLLM | Ollama (ホスト実行) | ワイルドカード。`ollama pull` したものが自動で並ぶ（下記） |
+| `kimi-k2.6` | **透過** | 外部 sglang（北大 llens） | Kimi K2.6。ライブ tok/s とコンテキスト長が生きる |
+| `qwen3.6-35b` | **透過** | vLLM (上流公式 / NVFP4) | Qwen3.6 35B-A3B（MoE VLM / vision / 78.5 tok/s） |
+| `qwen3.5-122b-custom` | **透過** | カスタム vLLM (SM121) | Qwen3.5 122B-A10B。**通常は停止中** |
+| `step-3.7-flash` | **透過** | llama.cpp (GGUF IQ4_XS) | Step-3.7-Flash 198B-A11B。**通常は停止中** |
+
+「透過」= prism-gw が上流へ素通しする経路。**GPU を使うサービスは排他**なので、
+起動しているものだけが `/v1/models` に出る。
 
 **Ollama = ワイルドカード `ollama/*`**（`litellm/config.yaml`）。LiteLLM が `/v1/models` のたびに
 Ollama の `/api/tags` を引くので（`check_provider_endpoint: true`）、**`ollama pull` したものが
