@@ -45,7 +45,7 @@ docker exec -it nucllei nucllei create-admin --email <you>
   旧 OpenWebUI からの移行時、**旧 volume `open-webui` のデータ（チャット履歴・ユーザー）は引き継がれない**
   （別 volume かつ fork 後に DB スキーマが分岐）。旧 volume はロールバック用に残してある。
 - 設定は env が正（`docker-compose.yml`）。env を空にした項目のみ管理画面の保存値が生きる。
-- モデル源は LiteLLM 一本（下記）。Ollama にも直結しない。
+- モデル源は prism-gw 一本（下記）。LiteLLM にも Ollama にも直結しない。
 
 ## Ollama 設定
 
@@ -67,7 +67,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama
 Docker ネットワーク (`chat_default`) のサブネットは `docker-compose.yml` で `172.28.0.0/16` に固定済み。
 
 
-## LiteLLM API (外部アクセス)
+## API (外部アクセス)
 
 Tailscale経由でOpenAI互換APIとして利用可能。
 
@@ -76,11 +76,9 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 
 ### 利用可能なモデル
 
-**接続先は LiteLLM (`:4000`) 一本**だが、**ルートが 2 本**ある。Nucllei は
-`OPENAI_API_BASE_URLS=http://litellm:4000/v1;http://litellm:4000/sglang` の 2 つを見る
-（`ENABLE_OLLAMA_API=false`）。Ollama も LiteLLM 経由なので、**UI で使えるモデル =
-外部 API (`:4000`) で使えるモデル**である点は変わらない（ただし kimi だけ `/v1` ではなく
-`/sglang` 配下 — 理由は[下記](#litellm-を挟むと失われるもの2026-08-14-実測)）。
+**入口は prism-gw (`:4000/v1`) の 1 本**。Nucllei が登録する OpenAI エンドポイントも
+これ 1 個だけ（`ENABLE_OLLAMA_API=false`）。**UI で使えるモデル = 外部 API で使える
+モデル**で完全に一致する。
 
 | model_name | 経路 | バックエンド | 内容 |
 |---|---|---|---|
@@ -96,40 +94,23 @@ Tailscale経由でOpenAI互換APIとして利用可能。
 「透過」= prism-gw が上流へ素通しする経路。**GPU を使うサービスは排他**なので、
 起動しているものだけが `/v1/models` に出る。
 
+透過とそれ以外で何が変わるか（ライブ tok/s とコンテキスト長が LiteLLM 経由では
+消えること、既製ゲートウェイを使わなかった理由、実測値）は
+[`docs/gateway.md`](docs/gateway.md) が単一情報源。
+
 **Ollama = ワイルドカード `ollama/*`**（`litellm/config.yaml`）。LiteLLM が `/v1/models` のたびに
 Ollama の `/api/tags` を引くので（`check_provider_endpoint: true`）、**`ollama pull` したものが
 設定変更なしで出てくる**。名前は `ollama/` 付き（例 `ollama/gpt-oss:20b`）。
 
 ```bash
 # 実際に何が出るかは常にこれが正
-curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <LITELLM_MASTER_KEY>" \
+curl -s http://<HOST>:4000/v1/models -H "Authorization: Bearer <PRISM_GW_API_KEY>" \
   | python3 -c 'import sys,json;[print(m["id"]) for m in json.load(sys.stdin)["data"]]'
 ```
 
 > 既知の癖: ワイルドカード定義そのもの (`ollama/*`) もモデル一覧に混ざる（LiteLLM の仕様。
 > router に deployment がある場合は一覧から除去されない）。選んでも動かないので、
 > Nucllei 管理画面でこのモデルを無効化（`is_active` トグル）しておく。DB に残るので一度だけでよい。
-
-### LiteLLM を挟むと失われるもの（2026-08-14 実測）
-
-**LiteLLM はストリームを素通しせず組み直す**。上流（特に sglang）の拡張は落ちるので、
-Nucllei 側のトークン表示に効いてくる。v1.82.3 と 1.96.2 のソースで確認した挙動:
-
-| 何 | 挙動 | 影響 |
-|---|---|---|
-| チャンクごとの累積 usage | `stream_options` は上流まで素通しするので **sglang は返している**が、LiteLLM が受信側で全チャンクから usage を削除し（`streaming_handler.py` の `# remove usage from chunk, only send on final chunk`）最後に自前で 1 個合成する。1.96 でも同じ | **生成中のライブ tok/s が出ない**（確定値の表示は出る） |
-| 最終 usage フレームの形 | sglang は `choices: []` の専用フレーム。LiteLLM の合成チャンクは `choices: [{"delta": {}}]` | Nucllei 側で対応済み（technoplasm/nucllei#112） |
-| `/v1/models` の context 長 | 1.82 は id/object/created/owned_by の 4 キーのみ。**1.96 から `max_input_tokens` を返す**（`model_info` の設定値が優先） | ゲージの分母。1.96 未満では出ない |
-| `usage.reasoning_tokens` | sglang 拡張。OpenAI 形の `completion_tokens_details.reasoning_tokens` に入れ替わる | 表示に使っていないので実害なし |
-
-いずれも config のノブでは変えられない（ハードコード）。**そのため kimi-k2.6 だけは
-`model_list` に載せず、`general_settings.pass_through_endpoints` の生 proxy
-(`/sglang`) で配信している** — pass-through は `aiter_bytes()` をそのまま流すだけなので
-sglang のストリームがバイト単位で無改変に届き、上の 4 つが全部そのまま効く。
-
-代償は LiteLLM の routing / spend tracking をこのモデルだけ通らないこと。認証（master key）と
-`:4000` 単一エントリは保たれる。設定の注意点（`auth: true` が必須である理由など）は
-`litellm/config.yaml` のコメントに書いてある。
 
 ### 使い方
 
@@ -138,26 +119,26 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://<HOST>:4000/v1",
-    api_key="<LITELLM_MASTER_KEY>",
+    api_key="<PRISM_GW_API_KEY>",
 )
 response = client.chat.completions.create(
-    model="gpt-oss-20b",
+    model="ollama/gpt-oss:20b",
     messages=[{"role": "user", "content": "こんにちは"}],
 )
 ```
 
 ```bash
 curl http://<HOST>:4000/v1/chat/completions \
-  -H "Authorization: Bearer <LITELLM_MASTER_KEY>" \
+  -H "Authorization: Bearer <PRISM_GW_API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"model": "gpt-oss-20b", "messages": [{"role": "user", "content": "こんにちは"}]}'
+  -d '{"model": "ollama/gpt-oss:20b", "messages": [{"role": "user", "content": "こんにちは"}]}'
 ```
 
 モデル一覧の確認:
 
 ```bash
 curl http://<HOST>:4000/v1/models \
-  -H "Authorization: Bearer <LITELLM_MASTER_KEY>"
+  -H "Authorization: Bearer <PRISM_GW_API_KEY>"
 ```
 
 ## Qwen3.5-122B カスタム vLLM
