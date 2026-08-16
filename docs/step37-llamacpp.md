@@ -105,9 +105,10 @@ docker compose up -d --no-deps vllm-qwen35
 # コンテナ内から
 docker exec llamacpp-step37 curl -s localhost:8000/v1/models
 
-# LiteLLM 経由 (litellm も入れ直しておくこと: docker compose up -d --no-deps litellm)
+# prism-gw 経由 (gateway/config.yaml を触ったなら: docker compose up -d --no-deps prism-gw)
+# step-3.7-flash は透過ルート — LiteLLM は通らない (docs/gateway.md)
 curl -s localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $PRISM_GW_API_KEY" -H 'Content-Type: application/json' \
   -d '{"model":"step-3.7-flash","messages":[{"role":"user","content":"日本語で自己紹介して"}]}' \
   | jq -r '.choices[0].message.content'
 ```

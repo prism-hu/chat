@@ -1,7 +1,7 @@
 # Qwen3.5-122B カスタム vLLM（DGX Spark / SM121）
 
 このスタックは Qwen3.5-122B-A10B を **自前ビルドの vLLM イメージ**で配信している。その全体像・構築・
-チェック・配布(GHCR)をまとめる。Nucllei からは LiteLLM 経由で `qwen3.5-122b-custom` として見える。
+チェック・配布(GHCR)をまとめる。Nucllei からは prism-gw の透過ルートで `qwen3.5-122b-custom` として見える。
 
 ## 概要 / なぜカスタムか
 
@@ -29,7 +29,8 @@ docker compose up -d vllm-qwen35                 # 起動（初回ロード+ウ�
 - `docker logs -f vllm-qwen35` で `Application startup complete` を待つ。
 - **`--gpu-memory-utilization=0.85`**（compose 設定済み）。128GB は Ollama 等と共有のため 0.90 は
   起動時に `ValueError: Free memory ... less than desired` で落ちることがある。
-- **`litellm/config.yaml` を編集したら `docker compose restart litellm`**（起動中は reload しない）。
+- **`gateway/config.yaml` を編集したら `docker compose restart prism-gw`**（起動中は reload しない）。
+  このモデルは透過ルートなので `litellm/config.yaml` には載っていない。
 - **tool calling / sampling**: 起動コマンドに `--enable-auto-tool-choice --tool-call-parser qwen3_xml`
   （Nucllei の Native ツール呼び出し用。Qwen3.5 は `qwen3_xml` が専用パーサ）と
   `--generation-config auto`（モデル推奨 temp 0.6 / top_p 0.95 / top_k 20 と eos を反映）を設定済み。
@@ -38,20 +39,22 @@ docker compose up -d vllm-qwen35                 # 起動（初回ロード+ウ�
 
 ## 動作チェック
 
-> ✅ **2026-06-20 動作確認済み**: `/health` 200 / LiteLLM 経由で thinking（`reasoning_content`）出力 /
+> ✅ **2026-06-20 動作確認済み**: `/health` 200 / thinking（`reasoning_content`）出力 /
 > 正答（finish_reason=stop）/ **Native tool calling**（`tool_calls` が返る, `qwen3_xml`）。
-> thinking もツールも LiteLLM 経由で通るので Nucllei 直結は不要。
 >
 > 注: vLLM はホストに port 公開していない（compose に `ports:` なし）。host から `localhost:8000`
-> は届かない → 内部名 `vllm-qwen35:8000`、テストは `docker exec nucllei` か LiteLLM(`:4000`) 経由で。
+> は届かない → 内部名 `vllm-qwen35:8000`、テストは `docker exec nucllei` か prism-gw(`:4000`) 経由で。
+>
+> 経路は **透過**（prism-gw が素通し）。LiteLLM には載せていないので、`reasoning_content` も
+> tool calling も組み直されずそのまま届く（`docs/gateway.md`）。
 
 ```bash
-KEY=$(grep '^LITELLM_MASTER_KEY=' .env | cut -d= -f2)
+KEY=$(grep '^PRISM_GW_API_KEY=' .env | cut -d= -f2-)
 
 # 1) vLLM health（内部）
 docker exec nucllei sh -c 'curl -s -o /dev/null -w "%{http_code}\n" http://vllm-qwen35:8000/health'
 
-# 2) LiteLLM 経由（= Nucllei と同じ経路）＋ thinking
+# 2) prism-gw 経由（= Nucllei と同じ経路）＋ thinking
 curl -s http://localhost:4000/v1/chat/completions -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
   -d '{"model":"qwen3.5-122b-custom","messages":[{"role":"user","content":"9.11と9.9はどちらが大きい？"}],"max_tokens":1500}' \
   | python3 -c 'import sys,json;m=json.load(sys.stdin)["choices"][0]["message"];print("reasoning:",bool(m.get("reasoning_content")),"| answer:",m.get("content"))'
@@ -61,16 +64,6 @@ curl -s http://localhost:4000/v1/chat/completions -H "Authorization: Bearer $KEY
   -d '{"model":"qwen3.5-122b-custom","tool_choice":"auto","max_tokens":1500,"messages":[{"role":"user","content":"東京の天気を get_weather で調べて"}],"tools":[{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}}}}}]}' \
   | python3 -c 'import sys,json;print("tool_calls:",json.load(sys.stdin)["choices"][0]["message"].get("tool_calls"))'
 ```
-
-### thinking が出ない / 機能が落ちる場合 → Nucllei 直結
-LiteLLM を1段挟むため `reasoning_content` や tool calling が劣化するなら、Nucllei を vLLM に直結:
-1. `litellm/config.yaml` から `qwen3.5-122b-custom` を削除（外部 `:4000` API からは外れる点に注意）
-2. `nucllei` の environment を直結用に:
-   ```yaml
-   - OPENAI_API_BASE_URLS=http://litellm:4000/v1;http://vllm-qwen35:8000/v1
-   - OPENAI_API_KEYS=${LITELLM_MASTER_KEY};dummy
-   ```
-3. `nucllei` の `depends_on` に `vllm-qwen35` を足して `docker compose up -d`
 
 ## イメージをビルドし直す（install.sh）
 
