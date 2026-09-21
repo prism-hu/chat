@@ -208,6 +208,73 @@ prefill は 16k〜64k で ~2.96k tok/s とほぼ平坦、128k で 8% 低下（Mi
 8. **greedy が非決定的**（temperature 0 で 50 問中 13 問が回ごとに変わる）。
 9. 起動に **10〜11 分**。
 
+## この箱での実測（2026-09-22、1 台 / TP=1）
+
+`vendor/qwen38-flash-next` のレシピで実際に立てて測った値。**27B を止めてから**起動している。
+
+構成: `Mia-AiLab/Qwen3.8-Flash-Next-NVFP4` (99 GiB) / `vllm/vllm-openai:qwen38-flash-next` /
+TP=1 / context 262,144 / **KV bf16** / MTP=3 / GMU 0.786（予算 95.65 GiB）。
+
+| 回 | decode (gw 越し) | TTFT |
+|---|---|---|
+| 1 | 87.0 | 9.19 s |
+| 2 | 42.9 | 2.60 s |
+| 3 | 69.4 | 5.57 s |
+| 4 | 56.5 | 4.11 s |
+| 5 | 55.9 | 4.42 s |
+| 6 | 61.4 | 4.97 s |
+| 7 | 50.1 | 3.37 s |
+| 8 | 45.0 | 1.65 s |
+
+**平均 58.5 tok/s（45–87）。** 同じベンチ・同じゲートウェイ越しで測った
+**Qwen3.8-27B の 34–38 tok/s に対しておよそ 1.6 倍**。レシピの自己申告
+（48.7 tok/s）も上回っている。SSE 1 イベントあたり 2.6–5.1 トークンで、MTP が
+効いている。
+
+起動時の実測:
+
+```
+Available KV cache memory: 17.27 GiB
+GPU KV cache size: 630,856 tokens
+Maximum concurrency for 262,144 tokens per request: 2.41x
+```
+
+- **PLE の packed テーブルは 27 GiB**（`~/.cache/vllm`）。初回起動時に構築され、以後再利用。
+- 起動は約 12 分。ホストの使用メモリは 106 GiB、空き 15 GiB。
+- `/v1/models` の `max_model_len: 262144` は **prism-gw 越しでも保持される**。
+
+### KV を bf16 にした理由
+
+レシピ自身が `KV_CACHE_DTYPE=fp8` について警告する:
+
+> FP8 KV is a CAPACITY TRADE, not a free win. ... a long-reasoning benchmark
+> falling from **6/6 to 2/6**. This is sparse attention: quantised keys perturb
+> which blocks the indexer selects.
+
+fp8 なら KV プールは約 1.85 倍（1M 文脈が射程に入る）。**「有力モデルを 1 つだけ
+動かして最大化する」方針では容量より品質を取る**と判断して `auto`（bf16）にした。
+容量が要るときは `.env` の `KV_CACHE_DTYPE` を `fp8` に戻すだけ。
+
+なお TP=2 の調査時に「vLLM が BF16 KV を強制する」という報告と「レシピが fp8 の
+実測ログを載せている」という食い違いがあったが、**この 1 台構成では fp8 も選べる**
+（品質コスト付き）ことが分かったので、その点は決着した。
+
+### 運用上の注意: `start.sh` が起動まで到達しない
+
+`./start.sh` は **Step 6: Launch で何も起動せず exit 0 で終わる**（2 回再現）。
+PLE の構築までは正常に進み、`docker run` コマンドも正しく生成されるのに、
+スクリプト内から実行されない。回避策:
+
+```bash
+cd vendor/qwen38-flash-next
+./start.sh --no-launch > /tmp/cmd.log 2>&1        # コマンドを生成させる
+sed -e 's/\x1b\[[0-9;]*m//g' /tmp/cmd.log | sed -n '/^docker run/,$p' > /tmp/run.sh
+docker rm -f vllm-fn-tp1 2>/dev/null; bash /tmp/run.sh
+```
+
+停止は `docker stop vllm-fn-tp1`（レシピの `./stop.sh` は watchdog も止める）。
+**`--ipc host` なので、SIGKILL で落とすと `/dev/shm` にセグメントが残る。**
+
 ## 判断
 
 **2 台 TP=2 を常用構成にはしない。** 理由は単純で、**並列化の取り分が +10% しかなく、
