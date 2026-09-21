@@ -147,6 +147,13 @@ services:
       # 別の GB10 報告では 0.82 超で NVRM OOM。まず 0.80 で通し、実測で詰める。
       - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.80}
       - --chunked-prefill-size=8192
+      # 投機デコード (DFlash2)。**値は大文字の `DFLASH`** — イメージが受けるのは
+      # EAGLE / EAGLE3 / NEXTN / STANDALONE / NGRAM / DFLASH / DSPARK。
+      # ドラフトは z-lab/Qwen3.8-27B-DFlash2 (5 層 / 3.6GB)。
+      # **YaRN とは併用できない** (draft config に漏れて起動時クラッシュ) ので、
+      # 262144 を超える文脈が要るときは NEXTN に切り替えること。
+      - --speculative-algorithm=${QWEN38_SPEC_ALGO:-DFLASH}
+      - --speculative-draft-model-path=${QWEN38_DRAFT_PATH:-/models/qwen38-27b-dflash2-draft}
       - --reasoning-parser=qwen3
       - --tool-call-parser=qwen3_coder
       - --enable-metrics

@@ -219,9 +219,28 @@ models:
 - CUDA graph のキャプチャに約 2 分（58 パターン）。起動全体で約 5 分。
 - `/v1/models` に `max_model_len: 262144` が出て、prism-gw 越しでも保持される。
 
-| 構成 | decode | 備考 |
-|---|---|---|
-| 投機デコードなし | **11.4 tok/s** | SSE 1 イベント = 1 トークン。TTFT 0.15s |
+| 構成 | decode (gw 越し) | SGLang 自身の gen throughput | 備考 |
+|---|---|---|---|
+| 投機デコードなし | **11.4 tok/s** | — | SSE 1 イベント = 1 トークン |
+| **DFLASH (z-lab draft)** | **34.0 / 35.5 / 37.7 tok/s** | 42.6–44.5 tok/s | accept len 5.2–5.5、accept rate 0.60–0.64 |
+
+**投機デコードで約 3 倍**（11.4 → 34–38 tok/s）。プロンプトはコード生成
+（「フィボナッチの Python 関数を書いて説明して」）、`max_tokens=1200`、thinking ON。
+
+読み方の注意が 2 つある。
+
+- **SSE のイベント数で数えてはいけない。** DFLASH は 1 イベントに平均 **4.2–4.5 トークン**
+  乗るので、イベント数で測ると 4 倍過小評価になる。必ず
+  `stream_options.include_usage` の `completion_tokens` で割ること
+  （調査時の「平均 3.75」もこの実測とおおむね一致する）。
+- **gw 越しの実測は SGLang 自身の申告より 20% ほど低い**（34–38 対 42.6–44.5）。
+  差は prism-gw の中継と HTTP/SSE のオーバーヘッド。クライアントから見える値は
+  前者なので、体感の基準はこちら。
+
+調査時に見たコミュニティ報告の 50–65 tok/s には届いていない。未検証の伸びしろ:
+`--speculative-num-steps` / `--speculative-num-draft-tokens`（既定は 1 / 8）の調整、
+`--speculative-dflash-block-size`、DSPARK との比較、`--mem-fraction-static` を
+0.80 から上げること。accept rate 0.60–0.64 なのでドラフトの当たりを改善する余地はある。
 
 ## 未検証・実機で決めるべきこと
 
