@@ -41,6 +41,70 @@ model_list:
       model: openai/gpt-5.6-sol
       api_key: os.environ/OPENAI_API_KEY
 
+  # --- ChatGPT サブスク (Codex OAuth)。API キーではなく OAuth。 ---
+  # 上の gpt-5.6-* が **従量課金の公式 API**、こちらが **サブスクの枠**。中身は
+  # 同じモデルでも課金先が違うので、名前を `chatgpt/` 前置きにして取り違えを
+  # 防ぐ (ollama/* と同じ考え方)。
+  #
+  # 認証は API キーではなく device code flow。トークンは CHATGPT_TOKEN_DIR
+  # (compose で /app/chatgpt-auth) の auth.json に入り、ホストの
+  # ./litellm/chatgpt-auth/ に永続する (.gitignore 済み)。期限切れは
+  # refresh_token で自動更新されるので、通常この手順は 1 回だけ。
+  #
+  # **罠: auth.json にトークンが無い状態でここを生かして litellm を起動すると、
+  # ポートを bind する前に device code flow に入ってブロックする。** listen しない
+  # ので claude/gpt/gemini/ollama が丸ごと /v1/models から消える (実測済み)。
+  # なのでログインは**デーモンにさせず、使い捨てコンテナで先に済ませる**:
+  #
+  #   docker run --rm -v "$PWD/litellm/chatgpt-auth:/auth" -e CHATGPT_TOKEN_DIR=/auth \
+  #     --entrypoint python ghcr.io/berriai/litellm:v1.96.2 -u -c \
+  #     "from litellm.llms.chatgpt.authenticator import Authenticator; \
+  #      print(Authenticator().get_access_token()[:12])"
+  #
+  # 出てくる URL と code をブラウザで承認すると auth.json が書かれる。
+  # 一度 device code を要求すると **5 分の cooldown** があり、その間は無言で待つ。
+  #
+  # litellm 1.96.2 が知っている chatgpt/* 14 個を 2026-09-21 に総当たりした結果、
+  # **このアカウントで通ったのは下の 4 つだけ**。
+  #   通る: gpt-5.5 / gpt-5.6-luna / gpt-5.6-sol / gpt-5.6-terra
+  #   拒否: gpt-5.1-codex-max, gpt-5.1-codex-mini, gpt-5.2, gpt-5.2-codex,
+  #         gpt-5.3-chat-latest, gpt-5.3-codex, gpt-5.3-codex-spark,
+  #         gpt-5.3-instant, gpt-5.4, gpt-5.4-pro
+  #         → いずれも backend が 400 で
+  #           "The '<model>' model is not supported when using Codex with a
+  #            ChatGPT account."
+  # **Codex ブランドのモデル ID は軒並み使えない。** プランが変わったら再度
+  # 総当たりして、この一覧を更新すること。
+  #
+  # 注意:
+  #   - **クライアントが stream: true を送ること。必須。** この backend は非
+  #     ストリームだと空の output を返し、litellm が 500 で落ちる:
+  #       "Unknown items in responses API response: []"
+  #     responses API 経由でも中身は streaming iterator が返ってくるので、
+  #     そもそも非ストリームの口が無いと思ってよい。
+  #     **litellm_params に stream を書いても救えない** (実測: 非ストリームの
+  #     リクエストは同じ 500 のまま)。ここでは書かず、呼ぶ側の責任にしている。
+  #     fugu / Nucllei は通常ストリームで呼ぶので実用上は問題ない。
+  #   - サブスク backend は max_tokens / max_output_tokens / max_completion_tokens
+  #     と metadata を**拒否する**。litellm が落とすので設定は不要。
+  #   - ChatGPT サブスクを公式クライアント以外から叩くのは OpenAI の利用規約上
+  #     グレー。アカウント停止のリスクは自分持ちで使うこと。
+  - model_name: chatgpt/gpt-5.6-sol
+    litellm_params:
+      model: chatgpt/gpt-5.6-sol
+
+  - model_name: chatgpt/gpt-5.6-terra
+    litellm_params:
+      model: chatgpt/gpt-5.6-terra
+
+  - model_name: chatgpt/gpt-5.6-luna
+    litellm_params:
+      model: chatgpt/gpt-5.6-luna
+
+  - model_name: chatgpt/gpt-5.5
+    litellm_params:
+      model: chatgpt/gpt-5.5
+
   # --- Gemini (Google AI Studio の Gemini Developer API 直) ---
   # キーは ~/chat/.env の GEMINI_API_KEY (https://aistudio.google.com/apikey)。
   # 未設定/空でも litellm は起動し /v1/models にも並ぶが、リクエストは 401 になる。

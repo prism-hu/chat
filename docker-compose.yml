@@ -91,10 +91,17 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # gemini-* (Google AI Studio) のみが使う。同上、必須にはしない。
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # chatgpt/* (ChatGPT サブスク) が使う。API キーではなく OAuth トークンで、
+      # litellm が device code flow を踏んで下のマウント先に auth.json を書く。
+      # 既定は ~/.config/litellm/chatgpt で、コンテナ再作成のたびに消えるため移す。
+      - CHATGPT_TOKEN_DIR=/app/chatgpt-auth
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:
       - ./litellm:/app/litellm
+      # OAuth トークンの置き場 (.gitignore 済み)。**read-only にしないこと** —
+      # litellm がリフレッシュしたトークンをここに書き戻す。
+      - ./litellm/chatgpt-auth:/app/chatgpt-auth
     restart: always
 
   # Qwen3.5-122B-A10B (INT4+FP8 hybrid, MTP-2) served by vLLM, optimized for the

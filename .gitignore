@@ -13,3 +13,6 @@ _links/
 
 # .env のバックアップ (鍵が入っている)
 .env.bak*
+
+# ChatGPT サブスクの OAuth トークン (litellm が device code flow で書く)
+litellm/chatgpt-auth/
