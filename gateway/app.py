@@ -14,11 +14,13 @@ LiteLLM も Bifrost も、上流の応答を自前のスキーマへ正規化し
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import json
 import logging
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -124,18 +126,28 @@ def _response_headers(resp: httpx.Response) -> dict[str, str]:
     return {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
 
 
+# 一覧取得のタイムアウト。**connect だけ短くする**のが肝。
+# ホストごと落ちた上流は SYN に応答が無く、connect が満了するまで丸々待たされる。
+# read を短くすると生きている上流が重いときに取りこぼすので、そちらは据え置く。
+_MODELS_TIMEOUT = httpx.Timeout(8.0, connect=2.0, pool=2.0)
+
+
 async def _fetch_models(client: httpx.AsyncClient, up: dict) -> list[dict]:
     """上流の /v1/models を引く。落ちている上流は空扱い (一覧から消えるだけ)。"""
     url = up["base_url"].rstrip("/") + "/models"
     headers = {}
     if up.get("api_key"):
         headers["authorization"] = f"Bearer {up['api_key']}"
+    started = time.monotonic()
     try:
-        r = await client.get(url, headers=headers, timeout=httpx.Timeout(8.0))
+        r = await client.get(url, headers=headers, timeout=_MODELS_TIMEOUT)
         r.raise_for_status()
         return (r.json() or {}).get("data") or []
     except Exception as e:  # noqa: BLE001 — 上流の不調で一覧全体を落とさない
-        log.info("upstream %s not listable (%s)", url, type(e).__name__)
+        # 所要時間まで出す: 「落ちている上流はどれで、何秒待たされたか」が
+        # 一覧が遅いときの切り分けにそのまま要る。
+        log.warning("upstream %s not listable after %.2fs (%s)",
+                    url, time.monotonic() - started, type(e).__name__)
         return []
 
 
@@ -162,7 +174,11 @@ async def list_models(request: Request) -> Response:
     needed = {r["upstream"] for r in cfg.routes.values()} | {
         inc["upstream"] for inc in cfg.includes
     }
-    listings = {name: await _fetch_models(client, cfg.upstream(name)) for name in needed}
+    # **並列で引く。** 直列だと所要時間が全上流の合計になり、落ちた上流 1 つで
+    # 一覧全体がその分だけ遅れる。gather なら「最も遅い 1 上流」で済む。
+    names = sorted(needed)
+    listings = dict(zip(names, await asyncio.gather(
+        *(_fetch_models(client, cfg.upstream(n)) for n in names))))
 
     out: list[dict] = []
     declared: set[str] = set()
