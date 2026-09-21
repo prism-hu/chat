@@ -63,13 +63,19 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 `/v1/models` から外すので、**一覧に出ているものが今動いているもの**。この README に
 「今どれが動いているか」は書かない（すぐ嘘になる）。上の curl で見ること。
 
-`qwen3.5-122b-custom` は **既定では起動しない**（2026-09-22 から compose の
-`heavy` profile）。使うときだけ明示的に上げる:
+**大物 3 つはいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
+profile）。`docker compose up -d` で上がるのは `prism-gw` / `litellm` / `nucllei`
+の 3 つだけ。使うときだけ明示的に上げる:
 
 ```bash
-docker compose --profile heavy up -d vllm-qwen35   # 起動（モデルのロードに時間がかかる）
-docker compose stop vllm-qwen35                    # 停止
+docker compose --profile heavy up -d vllm-qwen35      # 122B (ロードに時間がかかる)
+docker compose --profile heavy up -d vllm-qwen36      # 35B-A3B VLM
+docker compose --profile heavy up -d llamacpp-step37  # 198B-A11B VLM
+docker compose stop vllm-qwen35                       # 停止
 ```
+
+3 つとも `restart: "no"`。`always` にすると profile で既定から外しても docker
+daemon 再起動で復活してしまい、「既定停止」にならない。
 
 > 122B のウェイトは統合メモリを ~100GB 占有する。Spark は GPU とシステムで
 > メモリを共有するので、**起動している間はホストの空きが 15% を切り**、fugu の

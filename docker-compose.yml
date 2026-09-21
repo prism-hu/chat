@@ -169,6 +169,10 @@ services:
   # gpu-memory-utilization を絞ってあり、ホストの ollama とは同居できる。
   # 計測値・不採用にした選択肢の記録: docs/qwen36-vllm.md
   vllm-qwen36:
+    # **既定では起動しない。** 大物 3 つは排他なので、profile を付けて
+    # `docker compose up -d` では上がらないようにしてある:
+    #   docker compose --profile heavy up -d vllm-qwen36
+    profiles: ["heavy"]
     # 上流公式イメージ。arm64 マニフェストあり、CUDA 13.0 / torch 2.11。
     # arch_list は sm_120 までだが GB10 (cc 12.1) で動くことを実機確認済み
     # (Blackwell は sm_120 の cubin が sm_121 で動く)。
@@ -238,6 +242,9 @@ services:
   # 戻すときは逆順。設定は両方残してあるので切り替えるだけ。
   # 詳細・チューニング・出典: docs/step37-llamacpp.md
   llamacpp-step37:
+    # **既定では起動しない。** 上の vllm-qwen35 / vllm-qwen36 と同じ heavy profile:
+    #   docker compose --profile heavy up -d llamacpp-step37
+    profiles: ["heavy"]
     image: llamacpp-step37:local
     build:
       context: ./llamacpp
