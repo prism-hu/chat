@@ -108,6 +108,17 @@ services:
   # DGX Spark (SM121). Image pulled from GHCR; model prepared on host via
   # scripts/fetch-model.sh. Build/versions/troubleshooting: docs/qwen35-vllm.md.
   vllm-qwen35:
+    # **既定では起動しない (2026-09-22)。** profile に入れてあるので
+    # `docker compose up -d` では上がらず、明示したときだけ上がる:
+    #   docker compose --profile heavy up -d vllm-qwen35
+    #   docker compose stop vllm-qwen35        # 止める
+    # 理由: 122B のウェイトが統合メモリを ~100GB 占有し、ホストの空きが 15% を
+    # 切る。Hermes のダッシュボードが "Your agent is running low on memory."
+    # (elevated: MemAvailable < 15%) を出し続ける状態になる。実測で
+    # MemAvailable 11.5GB / 124.6GB = 9.3%。fugu 自体は 760MB しか使っていない。
+    # restart も always をやめた。always のままだと profile で既定から外しても
+    # docker daemon 再起動で復活してしまい、「既定停止」にならない。
+    profiles: ["heavy"]
     # Pulled from GHCR (built on the DGX Spark, pushed to prism-hu). Rebuild only
     # if needed: vendor/qwen35-spark/install.sh, then docker push (see docs).
     image: ${VLLM_QWEN35_IMAGE:-ghcr.io/prism-hu/vllm-qwen35-v2:latest}
@@ -144,7 +155,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    restart: always
+    restart: "no"        # 既定停止なので always にしない (上記)
 
   # Qwen3.6-35B-A3B (NVFP4) — 総 35B / アクティブ 3B の MoE VLM。vision + tools +
   # thinking、ctx 262144。アーキテクチャは Qwen3.5 と同一

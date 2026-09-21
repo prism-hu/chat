@@ -63,6 +63,20 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 `/v1/models` から外すので、**一覧に出ているものが今動いているもの**。この README に
 「今どれが動いているか」は書かない（すぐ嘘になる）。上の curl で見ること。
 
+`qwen3.5-122b-custom` は **既定では起動しない**（2026-09-22 から compose の
+`heavy` profile）。使うときだけ明示的に上げる:
+
+```bash
+docker compose --profile heavy up -d vllm-qwen35   # 起動（モデルのロードに時間がかかる）
+docker compose stop vllm-qwen35                    # 停止
+```
+
+> 122B のウェイトは統合メモリを ~100GB 占有する。Spark は GPU とシステムで
+> メモリを共有するので、**起動している間はホストの空きが 15% を切り**、fugu の
+> ダッシュボードが `Your agent is running low on memory.` を出し続ける
+> （実測: 空き 11.5GB / 124.6GB = 9.3%）。停止すると 95.3% に戻る。
+> fugu 自身は 760MB しか使っていないので、このバナーは fugu の問題ではない。
+
 **モデルの増減はまずここを疑う前に実物を見ること:**
 
 ```bash
