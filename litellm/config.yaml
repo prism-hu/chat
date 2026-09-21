@@ -15,6 +15,17 @@ model_list:
   # 推論モデル (gpt-5.x) は temperature/top_p を受け付けない → drop_params: true
   # が落とすので、ここでは sampling を指定しない。
   #
+  # **reasoning_effort は必ず明示する (2026-09-21 追記)。** 省略して tools を
+  # 付けると OpenAI が 400 を返す:
+  #   "Function tools with reasoning_effort are not supported for gpt-5.6-luna
+  #    in /v1/chat/completions. To use function tools, use /v1/responses or set
+  #    reasoning_effort to 'none'."
+  # エラー文は「reasoning_effort を付けるな」と読めるが**逆**で、実測では
+  # none/minimal/low/medium/high の**どれかを明示すれば全部通り、省略したときだけ
+  # 落ちる** (サーバ側の既定値が tools と両立しないため)。gpt-5.6-* 3 つとも同じ。
+  # クライアントが送ってくればそちらが優先されるので、ここは「何も送らない
+  # クライアント」のための保険。
+  #
   # gpt-5.6 ラインナップ (2026-08 時点)。3つとも context 1.05M / chat mode。
   # 価格は $/1M tokens (in / out、cached in はその 1/10):
   #   luna   0.20 /  1.20   — 低価格枠。日常用
@@ -30,16 +41,19 @@ model_list:
     litellm_params:
       model: openai/gpt-5.6-luna
       api_key: os.environ/OPENAI_API_KEY
+      reasoning_effort: medium
 
   - model_name: gpt-5.6-terra
     litellm_params:
       model: openai/gpt-5.6-terra
       api_key: os.environ/OPENAI_API_KEY
+      reasoning_effort: medium
 
   - model_name: gpt-5.6-sol
     litellm_params:
       model: openai/gpt-5.6-sol
       api_key: os.environ/OPENAI_API_KEY
+      reasoning_effort: medium
 
   # --- ChatGPT サブスク (Codex OAuth)。API キーではなく OAuth。 ---
   # 上の gpt-5.6-* が **従量課金の公式 API**、こちらが **サブスクの枠**。中身は
