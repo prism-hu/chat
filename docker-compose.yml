@@ -117,6 +117,11 @@ services:
     pull_policy: missing
     container_name: sglang-qwen38
     ipc: host
+    # Cortex-X925 の大コアだけに pin する。このマシンは cpu 5-9,15-19 が 3900MHz、
+    # 0-4,10-14 が 2808MHz (実測 /sys/.../cpuinfo_max_freq)。小コアに落ちると
+    # decode が数 % 落ちる。
+    cpuset: "5-9,15-19"
+    shm_size: 32gb
     environment:
       - TZ=${TZ:-Asia/Tokyo}
     volumes:
@@ -145,7 +150,7 @@ services:
       - --max-mamba-cache-size=${QWEN38_MAMBA_CACHE:-50}
       # **統合メモリなので低めから。** MiaAI-Lab は 0.90 を pin しているが、
       # 別の GB10 報告では 0.82 超で NVRM OOM。まず 0.80 で通し、実測で詰める。
-      - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.80}
+      - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.85}
       - --chunked-prefill-size=8192
       # 投機デコード (DFlash2)。**値は大文字の `DFLASH`** — イメージが受けるのは
       # EAGLE / EAGLE3 / NEXTN / STANDALONE / NGRAM / DFLASH / DSPARK。
@@ -154,6 +159,21 @@ services:
       # 262144 を超える文脈が要るときは NEXTN に切り替えること。
       - --speculative-algorithm=${QWEN38_SPEC_ALGO:-DFLASH}
       - --speculative-draft-model-path=${QWEN38_DRAFT_PATH:-/models/qwen38-27b-dflash2-draft}
+      # **--speculative-num-steps は DFLASH では効かない。** 指定しても SGLang が
+      # 起動時に 1 へ戻す: "DFLASH only supports speculative_num_steps == 1".
+      # MiaAI-Lab レシピの SPEC_STEPS=3 は EAGLE 用の既定で、DFLASH 経路には
+      # 効いていない。指定しても無害だが、意味が無いので書かない。
+      #
+      # ドラフト長。既定 8 で accept len 5.2-5.5 / accept rate 0.60-0.64 だった。
+      - --speculative-num-draft-tokens=${QWEN38_SPEC_DRAFT:-12}
+      # DFLASH はこの strategy を要求する (レシピの注記)。
+      - --mamba-radix-cache-strategy=extra_buffer
+      - --enable-cache-report
+      # **--mamba-ssm-dtype=bfloat16 と --mamba-full-memory-ratio=4.21 は入れない。**
+      # レシピには入っているが、この箱で A/B したら accept rate が 0.60-0.64 から
+      # 0.29-0.44 に落ち、decode も 34-38 -> 30-34 tok/s に悪化した。SSM 状態を
+      # bf16 に落とすとドラフトと本体がずれるのだと思われる。KV プールも
+      # 1,973,758 -> 1,460,901 tokens に縮む (mamba 側に取られるため)。
       - --reasoning-parser=qwen3
       - --tool-call-parser=qwen3_coder
       - --enable-metrics
