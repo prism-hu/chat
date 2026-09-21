@@ -89,6 +89,8 @@ services:
       - KIMI_API_KEY=${KIMI_API_KEY:-}
       # gpt-* (OpenAI 公式 API) のみが使う。同上、必須にはしない。
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # gemini-* (Google AI Studio) のみが使う。同上、必須にはしない。
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DISABLE_SPEND_LOGS=True
       - LITELLM_MODE=DEV
     volumes:

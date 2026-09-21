@@ -41,6 +41,40 @@ model_list:
       model: openai/gpt-5.6-sol
       api_key: os.environ/OPENAI_API_KEY
 
+  # --- Gemini (Google AI Studio の Gemini Developer API 直) ---
+  # キーは ~/chat/.env の GEMINI_API_KEY (https://aistudio.google.com/apikey)。
+  # 未設定/空でも litellm は起動し /v1/models にも並ぶが、リクエストは 401 になる。
+  #
+  # 注意: **Google AI Pro の購読は API の無料トークンにはならない**。
+  #   - Pro の quota 増加は AI Studio の Web UI 内だけ。API キー経由は対象外。
+  #   - Pro に付くのは Google Developer Program の $10/月 Cloud クレジット
+  #     (Ultra は $100/月)。GCP プロジェクトに Cloud Billing を紐づけて有効化すると
+  #     Gemini API の課金に充当できる。
+  #   - 課金を付けない素の API キーにも無料枠はあるが Flash 系でも RPD が極小
+  #     (3.8 Flash は 20 RPD 規模の報告あり)。実際の枠は
+  #     https://aistudio.google.com/rate-limit で確認する。
+  #
+  # 価格 ($/1M tokens, in/out)。3.8 Flash は **2026-12-31 まで**の導入価格で、
+  # 2027-01-01 に両方 2 倍 (1.50 / 7.50) になる。batch/flex は半額。
+  #   gemini-3.8-flash       0.75 / 3.75
+  # context 1,048,576 in / 65,536 out。
+  # thinking は既定で ON。**このモデルは thinking で性能を出す設計**なので切らず、
+  # 間を取って medium を既定にする。実測 (「自己紹介を一文で」):
+  #     low    reasoning   0 / text 25
+  #     medium reasoning 166 / text 13
+  #     high   reasoning 479 / text 13
+  #   - `none` / `minimal` は 400 "Thinking level MINIMAL is not supported"。
+  #     このモデルで thinking を完全に切ることはできない。low が下限。
+  #   - Anthropic 形式の `thinking: {budget_tokens: 0}` は**黙って無視される**
+  #     (drop_params が落とす)。効くのは reasoning_effort だけ。
+  # 出力は $3.75/1M で reasoning も出力側に課金されるので、$10 枠を意識するなら
+  # リクエスト側で `reasoning_effort` を送って上書きする (リクエスト値が勝つ)。
+  - model_name: gemini-3.8-flash
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+      reasoning_effort: medium
+
   # --- Ollama (host, via the docker bridge gateway) ---
   # Wildcard route: LiteLLM matches `ollama/<name>` at request time (PatternMatchRouter)
   # and lists the host's ACTUAL models in /v1/models by calling Ollama's /api/tags
