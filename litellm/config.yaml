@@ -43,8 +43,24 @@ model_list:
 
   # --- ChatGPT サブスク (Codex OAuth)。API キーではなく OAuth。 ---
   # 上の gpt-5.6-* が **従量課金の公式 API**、こちらが **サブスクの枠**。中身は
-  # 同じモデルでも課金先が違うので、名前を `chatgpt/` 前置きにして取り違えを
-  # 防ぐ (ollama/* と同じ考え方)。
+  # 同じモデルでも課金先が違うので、クライアントから見える名前を `codex/` 前置き
+  # にして取り違えを防ぐ (ollama/* と同じ考え方)。
+  #
+  # **前置きが 2 種類あるので混同しないこと:**
+  #   model_name        `codex/...`    クライアントに見える名前。**ただの別名**で
+  #                                    中身は何でもよい。prism-gw はこれをそのまま
+  #                                    /v1/models に載せる。
+  #   litellm_params.model `chatgpt/...` **プロバイダ選択子。変更不可。**
+  #                                    litellm はこの前置きで chatgpt プロバイダ
+  #                                    (OAuth 認証) に振り分ける。
+  #
+  # `codex/` は「Codex CLI の OAuth 枠から出ている」という意味で、**Codex モデル
+  # という意味ではない**。皮肉なことに本物の codex-* は下記のとおり全部使えない。
+  #
+  # なお model_name を codex/ に変えても、**クライアントが `chatgpt/gpt-5.6-sol`
+  # と直接名乗れば依然として通る** (litellm が未宣言のモデル名をプロバイダ直指定
+  # として解釈するため)。/v1/models には codex/ しか出ないので実用上は困らないが、
+  # 「旧名を塞いだ」わけではないことは意識しておく。
   #
   # 認証は API キーではなく device code flow。トークンは CHATGPT_TOKEN_DIR
   # (compose で /app/chatgpt-auth) の auth.json に入り、ホストの
@@ -89,19 +105,19 @@ model_list:
   #     と metadata を**拒否する**。litellm が落とすので設定は不要。
   #   - ChatGPT サブスクを公式クライアント以外から叩くのは OpenAI の利用規約上
   #     グレー。アカウント停止のリスクは自分持ちで使うこと。
-  - model_name: chatgpt/gpt-5.6-sol
+  - model_name: codex/gpt-5.6-sol
     litellm_params:
       model: chatgpt/gpt-5.6-sol
 
-  - model_name: chatgpt/gpt-5.6-terra
+  - model_name: codex/gpt-5.6-terra
     litellm_params:
       model: chatgpt/gpt-5.6-terra
 
-  - model_name: chatgpt/gpt-5.6-luna
+  - model_name: codex/gpt-5.6-luna
     litellm_params:
       model: chatgpt/gpt-5.6-luna
 
-  - model_name: chatgpt/gpt-5.5
+  - model_name: codex/gpt-5.5
     litellm_params:
       model: chatgpt/gpt-5.5
 
