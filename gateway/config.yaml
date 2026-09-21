@@ -24,17 +24,6 @@ upstreams:
     # ここで入れ子の既定値は書かない — app.py の展開は入れ子に対応していない。
     api_key: ${LITELLM_MASTER_KEY}
 
-  # 北大 llens (H200) — **2026-09-21 に撤去。** H200 がこのネットワークから
-  # 到達できない場所へ移設されたため、上流ごと外した。生かしておくと
-  # /v1/models が毎回 connect timeout 分だけ待たされる (実測 8 秒 → 撤去後 0.02 秒)。
-  # 戻すときはこのブロックと下の kimi-k2.6 ルートのコメントを両方外すこと。
-  # sglang-llens:
-  #   base_url: http://llens.med.hokudai.ac.jp:13300/v1
-  #   api_key: ${KIMI_API_KEY:-}
-  #   # ストリーム中の累積 usage を上流に要求する。クライアントが
-  #   # stream_options を送らなくてもゲートウェイが差し込む = ライブ tok/s が出る。
-  #   force_continuous_usage: true
-
   vllm-qwen36:
     base_url: http://vllm-qwen36:8000/v1
     force_continuous_usage: true
@@ -50,9 +39,11 @@ upstreams:
 # name: クライアントから見えるモデル名 / upstream_model: 上流での実名
 # context を書かなければ上流の /v1/models の max_model_len をそのまま使う。
 models:
-  # kimi-k2.6 — 上流 (sglang-llens) 撤去に伴い 2026-09-21 に停止。上を参照。
-  # - name: kimi-k2.6
-  #   upstream: sglang-llens
+  # kimi-k2.6 (北大 llens / H200) — 2026-09-21 撤去。H200 がこのネットワークから
+  # 到達できない場所へ移設されたため、このルートと upstreams: の sglang-llens を
+  # **両方**外した (ルートだけ残すと `unknown upstream` で落ちる)。死んだ上流を
+  # 残すと /v1/models が毎回 connect timeout 分待たされる (実測 8.02s → 0.005s)。
+  # 復活させるときは両方まるごと `git show 6d6852f^:gateway/config.yaml` にある。
 
   - name: qwen3.6-35b
     upstream: vllm-qwen36
