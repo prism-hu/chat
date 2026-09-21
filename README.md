@@ -26,7 +26,7 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 | [docs/gateway.md](docs/gateway.md) | prism-gw の設計と、LiteLLM/Bifrost を使わなかった理由の実測 |
 | [docs/qwen3.8-27b-serving.md](docs/qwen3.8-27b-serving.md) | Qwen3.8-27B を GB10 で serve する調査（ランタイム比較・チェックポイント選定・sm_121 のハマりどころ） |
 | [docs/dgx-spark-tp2.md](docs/dgx-spark-tp2.md) | Spark 2 台 / TP=2 に増設する場合 |
-| [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next を Spark 2 台で serve する（1 台には載らない） |
+| [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next と TP=2（結論: 1 台で回すべき） |
 | [docs/qwen35-vllm.md](docs/qwen35-vllm.md) | Qwen3.5-122B カスタム vLLM のビルドと運用 |
 | [docs/qwen36-vllm.md](docs/qwen36-vllm.md) | Qwen3.6-35B-A3B (NVFP4) の計測と、不採用にした選択肢 |
 | [docs/step37-llamacpp.md](docs/step37-llamacpp.md) | Step-3.7-Flash (llama.cpp) の切り替えとチューニング |
