@@ -24,6 +24,13 @@ upstreams:
     # ここで入れ子の既定値は書かない — app.py の展開は入れ子に対応していない。
     api_key: ${LITELLM_MASTER_KEY}
 
+  # SGLang (Qwen3.8-27B)。continuous_usage_stats に対応しているので有効化する。
+  # **LiteLLM には載せない** — 通すと max_model_len とストリーム中の累積 usage が
+  # 消える (docs/gateway.md)。この 2 つが欲しくて SGLang を選んでいるので本末転倒。
+  sglang-qwen38:
+    base_url: http://sglang-qwen38:8000/v1
+    force_continuous_usage: true
+
   vllm-qwen36:
     base_url: http://vllm-qwen36:8000/v1
     force_continuous_usage: true
@@ -44,6 +51,10 @@ models:
   # **両方**外した (ルートだけ残すと `unknown upstream` で落ちる)。死んだ上流を
   # 残すと /v1/models が毎回 connect timeout 分待たされる (実測 8.02s → 0.005s)。
   # 復活させるときは両方まるごと `git show 6d6852f^:gateway/config.yaml` にある。
+
+  - name: qwen3.8-27b
+    upstream: sglang-qwen38
+    upstream_model: qwen38
 
   - name: qwen3.6-35b
     upstream: vllm-qwen36
