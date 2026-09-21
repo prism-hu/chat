@@ -24,6 +24,16 @@ upstreams:
     # ここで入れ子の既定値は書かない — app.py の展開は入れ子に対応していない。
     api_key: ${LITELLM_MASTER_KEY}
 
+  # Qwen3.8-Flash-Next (vLLM, 1 台構成)。**compose のサービスではない** —
+  # vendor/qwen38-flash-next の start.sh が `--network host` でホストの :8888 に
+  # 立てるので、ollama と同じくブリッジ GW 経由で見る。起動/停止は
+  #   cd vendor/qwen38-flash-next && ./start.sh   /   ./stop.sh
+  # **27B (sglang-qwen38) とは排他。** 先に `docker compose stop sglang-qwen38`。
+  # 詳細は docs/qwen3.8-flash-next-tp2.md。
+  qwen38-flash-next:
+    base_url: http://172.28.0.1:8888/v1
+    force_continuous_usage: true
+
   # SGLang (Qwen3.8-27B)。continuous_usage_stats に対応しているので有効化する。
   # **LiteLLM には載せない** — 通すと max_model_len とストリーム中の累積 usage が
   # 消える (docs/gateway.md)。この 2 つが欲しくて SGLang を選んでいるので本末転倒。
@@ -51,6 +61,10 @@ models:
   # **両方**外した (ルートだけ残すと `unknown upstream` で落ちる)。死んだ上流を
   # 残すと /v1/models が毎回 connect timeout 分待たされる (実測 8.02s → 0.005s)。
   # 復活させるときは両方まるごと `git show 6d6852f^:gateway/config.yaml` にある。
+
+  - name: qwen3.8-flash-next
+    upstream: qwen38-flash-next
+    upstream_model: qwen3.8-flash-next
 
   - name: qwen3.8-27b
     upstream: sglang-qwen38

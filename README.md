@@ -75,6 +75,25 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 `/v1/models` から外すので、**一覧に出ているものが今動いているもの**。この README に
 「今どれが動いているか」は書かない（すぐ嘘になる）。上の curl で見ること。
 
+### ローカルの大物は「同時に 1 つだけ」
+
+GPU と統合メモリを丸ごと使うので、**ローカルモデルは常に 1 つだけ動かす**。
+切り替えるときは必ず先に今動いているものを止めること。
+
+| モデル | 起動 | 停止 |
+|---|---|---|
+| **Qwen3.8-Flash-Next** (vLLM, 1 台) | `cd vendor/qwen38-flash-next && ./start.sh` | `./stop.sh` |
+| Qwen3.8-27B (SGLang) | `docker compose --profile heavy up -d sglang-qwen38` | `docker compose stop sglang-qwen38` |
+| Qwen3.5-122B (vLLM) | `docker compose --profile heavy up -d vllm-qwen35` | `docker compose stop vllm-qwen35` |
+| Qwen3.6-35B (vLLM) | `docker compose --profile heavy up -d vllm-qwen36` | `docker compose stop vllm-qwen36` |
+| Step-3.7-Flash (llama.cpp) | `docker compose --profile heavy up -d llamacpp-step37` | `docker compose stop llamacpp-step37` |
+
+Flash-Next だけは compose のサービスではなく `vendor/qwen38-flash-next` の
+submodule（[MiaAI-Lab のレシピ](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark)）で動かす。
+イメージ内の vLLM にパッチを当て、51B の PLE テーブルを mmap するため、
+素の compose では再現できないため。`--network host` でホストの `:8888` に立ち、
+prism-gw はブリッジ GW 経由（`172.28.0.1:8888`）で見る（ollama と同じ形）。
+
 **大物 3 つはいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
 profile）。`docker compose up -d` で上がるのは `prism-gw` / `litellm` / `nucllei`
 の 3 つだけ。使うときだけ明示的に上げる:

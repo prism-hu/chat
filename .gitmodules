@@ -4,3 +4,6 @@
 [submodule "vendor/nucllei"]
 	path = vendor/nucllei
 	url = git@github.com:technoplasm/nucllei.git
+[submodule "vendor/qwen38-flash-next"]
+	path = vendor/qwen38-flash-next
+	url = https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark
