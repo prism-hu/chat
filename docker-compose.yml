@@ -139,9 +139,10 @@ services:
       - --kv-cache-dtype=fp8_e4m3
       # 64 層中 16 層だけが KV を持ち (full_attention_interval: 4)、残り 48 層は
       # Gated DeltaNet の固定サイズ再帰状態。こちらは別枠で確保するので、
-      # 同時実行数を上げるならセットで上げる (目安 = 同時実行数 x 4)。
+      # 同時実行数を上げるならセットで上げる (**1 リクエスト 5 スロット**。
+      # 足りないと max-running-requests が黙って切り詰められる)。
       - --max-running-requests=${QWEN38_MAX_RUNNING:-10}
-      - --max-mamba-cache-size=${QWEN38_MAMBA_CACHE:-40}
+      - --max-mamba-cache-size=${QWEN38_MAMBA_CACHE:-50}
       # **統合メモリなので低めから。** MiaAI-Lab は 0.90 を pin しているが、
       # 別の GB10 報告では 0.82 超で NVRM OOM。まず 0.80 で通し、実測で詰める。
       - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.80}

@@ -82,7 +82,7 @@ curl http://127.0.0.1:8888/v1/models
 |---|---|---|
 | `CONTEXT_LENGTH` | `262144` | 262144–1000000。1M 超は `YARN=1` |
 | `QUANT` | `nvfp4` | `nvfp4` / `nvfp4-fp4` / `fp8` / `bf16` |
-| `MAX_CONCURRENT_REQUESTS` | `10` | `--max-running-requests` と mamba プール（値×4）を決める |
+| `MAX_CONCURRENT_REQUESTS` | `10` | `--max-running-requests` と mamba プール（値×5）を決める |
 | `CHUNKED_PREFILL` | `8192` | prefill チャンク |
 | `CPUSET` | `5-9,15-19` | **Cortex-X5 の大コアのみに pin**。無しだと小コアに落ちて decode -2〜7% |
 | `PORT` | `8888` | |
@@ -97,8 +97,9 @@ curl http://127.0.0.1:8888/v1/models
 --mem-fraction-static 0.90
 --chunked-prefill-size 8192          # ← --chunked-prefill ではない
 --max-running-requests 10
---max-mamba-cache-size 40            # = 同時実行数 × 4（GDN の状態プール）
---speculative-algorithm dflash2      # または dspark / mtp
+--max-mamba-cache-size 50            # = 同時実行数 × 5（GDN の状態プール）
+--speculative-algorithm DFLASH       # 大文字。EAGLE/EAGLE3/NEXTN/STANDALONE/NGRAM/DFLASH/DSPARK
+--speculative-draft-model-path /models/qwen38-27b-dflash2-draft
 --reasoning-parser qwen3
 --tool-call-parser qwen3_coder
 --enable-metrics --enable-cache-report
@@ -108,6 +109,9 @@ curl http://127.0.0.1:8888/v1/models
 
 - 64 層中 **16 層だけが KV を持つ**（`full_attention_interval: 4`）。残り 48 層は Gated DeltaNet の
   固定サイズ再帰状態で、`--max-mamba-cache-size` が別枠で効く。**同時実行数を増やすならここも増やす。**
+  **1 リクエストあたり 5 スロット**（当初 4 と書いていたが誤り。起動ログが
+  `5 state slots per request` と明示する）。足りないと `--max-running-requests` が
+  黙って切り詰められる: `max_running_requests is capped to 8 by the mamba state cache`。
 - **DSpark と DFlash2 は YaRN と併用不可**（draft config に漏れて起動時クラッシュ）。
   262144 超が要るなら **MTP モード一択**。
 - DFlash2 の SSE は 1 イベントに平均 3.75 トークン乗るので、**イベント数で tok/s を測ると 4 倍過小評価**する。
@@ -198,6 +202,26 @@ models:
 
 ふぐ側は `OPENAI_BASE_URL=http://host.docker.internal:4000/v1` のままでよい。
 `/v1/models` に `max_model_len` が出るので Hermes のコンテキスト長自動検出も効く。
+
+## この箱での実測（2026-09-22）
+
+`lmsysorg/sglang:dev-qwen38-27b-dflash2` + `RadixArk/Qwen3.8-27B-NVFP4-BF16-LMHead`、
+`--mem-fraction-static=0.80` / `--kv-cache-dtype=fp8_e4m3` / `--context-length=262144`。
+
+起動時に確認できたこと:
+
+- **0.80 で OOM せずに起動する。** KV プールは FP8 で **1,973,758 tokens**
+  （K 30.12GB + V 30.12GB）、mamba state 5.88GB、確保後の空き 22.18GB。
+  262,144 ctx なら約 7.5 本が同時に載る勘定。
+- **FlashInfer の autotune が `sm121` 専用キャッシュを生成する**
+  （`.cache/sglang/flashinfer/autotune/0.6.17/sm121/`）。sm_121 向けに効いている証拠。
+- GDN は Triton カーネル（decode / extend / verify とも `TritonGDNKernel`）。
+- CUDA graph のキャプチャに約 2 分（58 パターン）。起動全体で約 5 分。
+- `/v1/models` に `max_model_len: 262144` が出て、prism-gw 越しでも保持される。
+
+| 構成 | decode | 備考 |
+|---|---|---|
+| 投機デコードなし | **11.4 tok/s** | SSE 1 イベント = 1 トークン。TTFT 0.15s |
 
 ## 未検証・実機で決めるべきこと
 
