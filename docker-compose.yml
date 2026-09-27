@@ -146,11 +146,15 @@ services:
       # Gated DeltaNet の固定サイズ再帰状態。こちらは別枠で確保するので、
       # 同時実行数を上げるならセットで上げる (**1 リクエスト 5 スロット**。
       # 足りないと max-running-requests が黙って切り詰められる)。
-      - --max-running-requests=${QWEN38_MAX_RUNNING:-10}
-      - --max-mamba-cache-size=${QWEN38_MAMBA_CACHE:-50}
+      # 16 は patholint の並列バッチ (batch -p 16) 向け。DFLASH の総スループットは
+      # C1 ~40 / C4 ~95 / C8 ~165 / C16 ~250 tok/s と伸びる (2026-09-28 実測、
+      # docs/qwen3.8-27b-serving.md「patholint 向けチューニング」)。
+      - --max-running-requests=${QWEN38_MAX_RUNNING:-16}
+      - --max-mamba-cache-size=${QWEN38_MAMBA_CACHE:-80}
       # **統合メモリなので低めから。** MiaAI-Lab は 0.90 を pin しているが、
-      # 別の GB10 報告では 0.82 超で NVRM OOM。まず 0.80 で通し、実測で詰める。
-      - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.85}
+      # 別の GB10 報告では 0.82 超で NVRM OOM。0.85 だと OS 側の空きが ~11GB まで
+      # 減っていたので 0.80 に戻した (KV pool は 771k tokens あり 262k ctx でも余る)。
+      - --mem-fraction-static=${QWEN38_MEM_FRACTION:-0.80}
       - --chunked-prefill-size=8192
       # 投機デコード (DFlash2)。**値は大文字の `DFLASH`** — イメージが受けるのは
       # EAGLE / EAGLE3 / NEXTN / STANDALONE / NGRAM / DFLASH / DSPARK。
@@ -165,7 +169,10 @@ services:
       # 効いていない。指定しても無害だが、意味が無いので書かない。
       #
       # ドラフト長。既定 8 で accept len 5.2-5.5 / accept rate 0.60-0.64 だった。
-      - --speculative-num-draft-tokens=${QWEN38_SPEC_DRAFT:-12}
+      # 単発では 8/12/16 の差はノイズに埋もれるが、並列時は verify が bs x draft
+      # トークンになるので短い方が得 (C8: 12 → 15.3 s/件、8 → 14.3 s/件)。
+      # mamba の intermediate state もドラフト長に比例して減る。
+      - --speculative-num-draft-tokens=${QWEN38_SPEC_DRAFT:-8}
       # DFLASH はこの strategy を要求する (レシピの注記)。
       - --mamba-radix-cache-strategy=extra_buffer
       - --enable-cache-report

@@ -285,3 +285,59 @@ models:
 - DFlash2 の上流未修正バグ 2 件: 高並行時のリクエスト間コンテキスト漏れ（sglang #36548）、
   thinking ON で greedy 出力が target-only と乖離（#38009）。
 - vision tower を aarch64 で実際に回した実績は SGLang と llama.cpp 以外で確認できていない。
+
+## patholint 向けチューニング（2026-09-28）
+
+patholint（病理報告書の Typo / Inconsistency 検出）を実用速度で回すための調査。
+詳細ログは patholint 側の `,docs/sglang-tuning.md`（gitignore）。
+
+### 結論
+
+- **サーバ既定を `--max-running-requests=16` / `--max-mamba-cache-size=80` /
+  `--mem-fraction-static=0.80` / `--speculative-num-draft-tokens=8` に変更**（旧 10 / 50 / 0.85 / 12）。
+  DFLASH は据え置き。context 262144 も据え置き（KV pool 776,699 tokens）。
+- 並列時の総スループット（SGLang 申告、thinking 生成、DFLASH draft 8）:
+  C1 ~40–46 / C4 ~95–104 / C8 ~165 / **C16 ~250 tok/s**。patholint は `batch -p 16` で投げる。
+- 空きメモリは 0.85 のとき ~11GB → 0.80 で ~16GB（C16 負荷時 ~12GB）、swap は増えず。
+
+### thinking ON は思考長の上限なしでは実用にならない
+
+- Qwen3.8-27B の thinking は、推奨サンプリング（temp 0.6 / top_p 0.95 / top_k 20）にしても
+  1 件 5k–16k+ tokens 続き、**`<|im_end|>` を思考中に出して content が空で終わる**ことがある
+  （finish_reason=stop、全トークンが reasoning）。
+- **DFLASH 固有ではない。** NEXTN（本体 MTP）でも同じ（4.0k で content 空、12k で length ×2）。
+  temp>0 では DFLASH は sampling verify（rejection sampling）経路に入るので、#38009（greedy 時の乖離）は
+  この用途では効いていない。品質（patholint の検出率）も NEXTN と同等だった。
+- **この image の `Qwen3ThinkingBudgetLogitProcessor` は使えない。** think トークン id が
+  151667/151668（Qwen3 旧 vocab）に決め打ちで、Qwen3.8（vocab 248k）とは id が違う。
+  サーバ側で掛けるなら `--enable-strict-thinking` + リクエストの `custom_params.thinking_budget`
+  （reasoner grammar が tokenizer から `</think>` を引くので vocab 非依存、DFLASH も grammar mask 対応）
+  だが、strict thinking は全リクエストの思考中の `<tool_call>` / `<|im_end|>` を禁止するので入れていない。
+- patholint はクライアント側で上限を掛ける: 1 回目を `max_tokens=budget` で生成 → length で切れたら
+  思考を閉じた assistant prefill（`...\n</think>\n\n`）を `continue_final_message: true` で送り、
+  回答だけ生成させる（`min_tokens: 2` を付けないと、並列時に 1–3/20 件が `</think>` 直後に EOS で空になる）。
+- **ストリームを途中で閉じても prism-gw 越しでは上流の生成が止まらない。** 打ち切りたいときは
+  必ず `max_tokens` で切ること（閉じた 4 本が裏で max_tokens まで走り続け、並列数が倍になっていた）。
+
+### patholint 側の結果（全 50 件、C16 相当）
+
+| patholint 設定 | 実効 s/件 | 1件 中央値 | Inconsistency | Typo |
+|---|---|---|---|---|
+| thinking OFF（従来） | 5.1（直列） | 2.9s | 11/15 | 2/5 |
+| 思考 1k × 2 サンプル並列・和集合（推奨） | **9.7** | 73s | **14/15** | 2/5 |
+| 思考 2k × 1 | 10.5 | 144s | 12/15（反復平均 0.89） | 1/5 |
+
+### 速度（NEXTN vs DFLASH、draft 長）
+
+| 構成 | patholint t2k × 20 件 (C16) | gen tok/s @C15–16 | accept len |
+|---|---|---|---|
+| DFLASH draft 8 | **11.1–11.5 s/件** | ~250 | 4–5 |
+| NEXTN steps 3 / draft 4 | 14.7–14.9 s/件 | ~188 | ~3.0 |
+
+C8 では DFLASH draft 12 → 8 で 15.3 → 14.3 s/件（単発では差がノイズに埋もれるが、並列時は
+verify が bs × draft トークンになるので短い方が得。mamba の intermediate state も比例して減る）。
+
+### Nucllei / 他の利用者への影響
+
+- context 262144 と DFLASH は変えていない。同時実行 16 本まで受ける。
+- mem-fraction を下げたので KV pool は 1.01M → 777k tokens（262k ctx が ~3 本同時に載る）。
