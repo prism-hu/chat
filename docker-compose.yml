@@ -34,7 +34,7 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - prism-gw
-    restart: always
+    restart: "no"        # 自動起動しない。使うときに docker compose up -d
 
   # prism-gw — 唯一の入口 (:4000)。クライアントのキーは PRISM_GW_API_KEY の 1 本だけ。
   #
@@ -65,7 +65,7 @@ services:
       - ./gateway/config.yaml:/app/config.yaml:ro
     depends_on:
       - litellm
-    restart: always
+    restart: "no"        # 自動起動しない。使うときに docker compose up -d
 
   # 形式変換が要るもの (Anthropic / OpenAI) と Ollama のワイルドカード列挙だけを担当。
   # OpenAI 互換な上流 (vLLM / sglang / llama.cpp) は prism-gw が素通しするので
@@ -102,7 +102,7 @@ services:
       # OAuth トークンの置き場 (.gitignore 済み)。**read-only にしないこと** —
       # litellm がリフレッシュしたトークンをここに書き戻す。
       - ./litellm/chatgpt-auth:/app/chatgpt-auth
-    restart: always
+    restart: "no"        # 自動起動しない。使うときに docker compose up -d
 
   # Qwen3.8-27B (dense 27B VLM, Gated DeltaNet hybrid) served by SGLang.
   # 選定の根拠・他ランタイムとの比較・sm_121 の地雷は docs/qwen3.8-27b-serving.md。

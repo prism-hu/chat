@@ -96,7 +96,8 @@ prism-gw はブリッジ GW 経由（`172.28.0.1:8888`）で見る（ollama と�
 
 **大物 3 つはいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
 profile）。`docker compose up -d` で上がるのは `prism-gw` / `litellm` / `nucllei`
-の 3 つだけ。使うときだけ明示的に上げる:
+の 3 つだけ。この 3 つも `restart: "no"`（2026-09-28 から）で、ホスト再起動・docker
+daemon 再起動では上がらない。使うときに `docker compose up -d` する。使うときだけ明示的に上げる:
 
 ```bash
 docker compose --profile heavy up -d vllm-qwen35      # 122B (ロードに時間がかかる)
