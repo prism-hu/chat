@@ -275,6 +275,65 @@ docker rm -f vllm-fn-tp1 2>/dev/null; bash /tmp/run.sh
 停止は `docker stop vllm-fn-tp1`（レシピの `./stop.sh` は watchdog も止める）。
 **`--ipc host` なので、SIGKILL で落とすと `/dev/shm` にセグメントが残る。**
 
+**原因が分かった（2026-10-03）。** `logs/archive/` に `*-container.log` が 1 つも無いと、
+Step 6 冒頭の `ls -1t .../*-container.log | tail | while read` が `ls` の exit 2 +
+`pipefail` で無言終了する（実際の終了コードは 2）。空ファイルを 1 つ置けば
+`./start.sh` はそのまま最後まで走り、watchdog も付く:
+
+```bash
+touch vendor/qwen38-flash-next/logs/archive/00000000T000000-container.log
+```
+
+ほかに 2 つ引っかかる:
+
+- **動いているコンテナがあると起動を拒否する**（空きメモリ不足の ERR で exit 1）。
+  設定を変えて上げ直すときは先に `./stop.sh`。
+- **GPU に他プロセスが居ると Step 3 で止まる。** technoplasm の `compute.jobs`
+  （常駐、282 MiB）が居るので `REQUIRE_IDLE_GPU=false ./start.sh` で上げている。
+
+### この箱での調整（2026-10-03）
+
+`.env` は vendor 側の `.gitignore` で管理外なので、ここに書いておく。既定からの差分は 3 つ。
+
+| 設定 | 値 | 理由 |
+|---|---|---|
+| `CHAT_TEMPLATE` | `files/chat-template/chat_template.jinja` | 下記「思考が終わらない」 |
+| `MTP_DRAFT_VOCAB` | `files/draft_vocab_ja_en_code_65k.txt` | 下記「日本語の draft 語彙」 |
+| `MAX_NUM_BATCHED_TOKENS` | `8192` | README の prefill +11% / TTFT −10%（こちらでは未計測。decode は不変） |
+
+**思考が終わらない。** チェックポイント同梱のテンプレートは `reasoning_effort` の既定が
+**`xhigh`**。「病理診断における AI の役割を 300 字で」に 7,810 トークン（297 秒）考え続け、
+回答ゼロのまま切れた（1 回の計測）。同梱の froggeric 版テンプレートは既定が `medium` で、
+同じ依頼が思考 110–612 トークンで返る。medium / low / オフの計 43 リクエストは全部
+`finish_reason=stop` まで到達した。
+
+- `low` は `medium` より短くなるとは限らない（「こんにちは」に 626 トークン考えた回がある）。
+- 切るなら `chat_template_kwargs: {"enable_thinking": false}` か `reasoning_effort: "none"`。
+  ただし思考オフは回答の質が落ちるので、**既定は medium のまま**（ken 判断）。
+- `thinking_token_budget` による上限は、この起動構成（V2 runner + MTP）では効かない
+  という報告がある（vLLM #50473 / #54906、未検証）。
+
+**日本語の draft 語彙。** 同梱の `draft_vocab_en_code_47k.txt` は日本語のトークン出現の
+32% しか覆わない（jawiki の held-out 41 MiB で計測）。スペイン語版と同じ手順
+（`files/build_draft_vocab_extend.py`、47k を床にして頻度順に 65,536 行まで）で、
+jawiki 402 MiB（`wikimedia/wikipedia` `20231101.ja` の先頭 28,000 記事）から
+`draft_vocab_ja_en_code_65k.txt` を作った。held-out で 99.5%。**このファイルも管理外。**
+
+gw 越し・medium・単発の decode tok/s（47k は 4 回、65k は 3 回の幅）:
+
+| プロンプト | 47k (en+code) | ja 65k |
+|---|---|---|
+| 日本語の挨拶 | 28.1–31.7 | 39.2–44.7 |
+| 日本語 300 字の説明 | 23.9–26.9 | 34.9–44.3 |
+| 日本語 + 数式（陽性的中率） | 44.5–46.2 | 54.0–55.8 |
+| 英語コード | 51.2–52.3 | 51.2–53.6 |
+
+**Ollama とは共存できない。** Flash-Next 稼働中の MemAvailable は 13–16 GiB。
+`ollama/gpt-oss:20b`（17 GB）を誰かが呼んだ時点で watchdog が Flash-Next を止めた
+（MemAvailable < 6 GiB、ホストは無事）。Flash-Next を上げている間は
+`sudo systemctl stop ollama`。止めている間は gw の一覧から `ollama/*` が消える
+（`gateway/config.yaml` の `require_alive`）。
+
 ## 判断
 
 **2 台 TP=2 を常用構成にはしない。** 理由は単純で、**並列化の取り分が +10% しかなく、
