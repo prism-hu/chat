@@ -151,6 +151,20 @@ async def _fetch_models(client: httpx.AsyncClient, up: dict) -> list[dict]:
         return []
 
 
+# 生存確認のタイムアウト。一覧取得と並列に走るので、落ちていても一覧が待たされるのは
+# 最大でこの秒数。止まっているだけなら connection refused で即座に返る。
+_PROBE_TIMEOUT = httpx.Timeout(1.0)
+
+
+async def _alive(client: httpx.AsyncClient, url: str) -> bool:
+    """url が 2xx を返せば生きている扱い。繋がらない・遅い・エラーは全部「落ちている」。"""
+    try:
+        r = await client.get(url, timeout=_PROBE_TIMEOUT)
+        return r.is_success
+    except Exception:  # noqa: BLE001 — 落ちているのが平常でありうるので騒がない
+        return False
+
+
 def _pick_context(entry: dict, keys: list[str]) -> int | None:
     for k in keys:
         v = entry.get(k)
@@ -177,8 +191,15 @@ async def list_models(request: Request) -> Response:
     # **並列で引く。** 直列だと所要時間が全上流の合計になり、落ちた上流 1 つで
     # 一覧全体がその分だけ遅れる。gather なら「最も遅い 1 上流」で済む。
     names = sorted(needed)
-    listings = dict(zip(names, await asyncio.gather(
-        *(_fetch_models(client, cfg.upstream(n)) for n in names))))
+    # require_alive の生存確認も同じ gather に載せる (URL ごとに 1 回)。
+    probes = sorted({
+        g["url"] for inc in cfg.includes for g in inc.get("require_alive") or []
+    })
+    results = await asyncio.gather(
+        *(_fetch_models(client, cfg.upstream(n)) for n in names),
+        *(_alive(client, u) for u in probes))
+    listings = dict(zip(names, results[:len(names)]))
+    alive = dict(zip(probes, results[len(names):]))
 
     out: list[dict] = []
     declared: set[str] = set()
@@ -202,6 +223,13 @@ async def list_models(request: Request) -> Response:
         # パターンで消したいときは exclude_glob を使う。
         excl = set(inc.get("exclude") or [])
         excl_glob = inc.get("exclude_glob") or []
+        # require_alive: url が応答しない間だけ、glob に合うものを一覧から外す。
+        # LiteLLM は Ollama が落ちていると静的な組み込みリスト (`ollama/llama2`) に
+        # フォールバックするので、上流の一覧だけでは「実在しない」と見分けられない。
+        # **一覧だけの話**で、ルーティング (proxy) は変えない。
+        excl_glob = excl_glob + [
+            g["glob"] for g in inc.get("require_alive") or [] if not alive[g["url"]]
+        ]
         for entry in listings.get(inc["upstream"], []):
             mid = entry.get("id")
             if not mid:

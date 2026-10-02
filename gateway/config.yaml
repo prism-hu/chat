@@ -95,5 +95,14 @@ include:
     # ワイルドカード定義そのものだけを落とし、配下の実モデルは残る。
     # (パターンで消したいときは exclude_glob)
     exclude: ["ollama/*"]
+    # url が 2xx を返す間だけ、glob に合うモデルを一覧に出す (こちらはグロブ)。
+    # Ollama が止まっていると LiteLLM は静的な組み込みリストにフォールバックし、
+    # 実在しない `ollama/llama2` を返してくる。それを一覧に出さないための生存確認。
+    # 確認は一覧取得と並列・タイムアウト 1 秒なので、落ちていても一覧は遅くならない
+    # (停止中は connection refused で即座に返る)。**一覧だけ**に効き、
+    # リクエストの振り分けは変わらない。url は litellm/config.yaml の api_base と揃える。
+    require_alive:
+      - glob: "ollama/*"
+        url: http://172.28.0.1:11434/api/version
     # 上で明示ルートを持つモデルは重複するので取り込まない
     skip_declared: true

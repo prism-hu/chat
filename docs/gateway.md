@@ -53,6 +53,11 @@ LiteLLM には認証付きの生 pass-through 機能があるが **Enterprise �
   **こちらで差し込む**。クライアント（Nucllei）が送らなくても効く
 - 停止中の上流は `/v1/models` から自動で消える（`vllm-qwen35` と `llamacpp-step37` は
   普段停止しているので、一覧に出るのは起動しているものだけ）
+- **Ollama が止まっている間は `ollama/...` を一覧に出さない**（`include` の
+  `require_alive`）。LiteLLM は Ollama に繋がらないと静的な組み込みリストに
+  フォールバックして実在しない `ollama/llama2` を返すので、ゲートウェイ側で
+  Ollama の `/api/version` を直接叩いて確かめる。確認は一覧取得と並列・タイムアウト
+  1 秒。効くのは一覧だけで、ルーティングは変えない
 
 ## 設定
 
@@ -80,13 +85,22 @@ include:                               # 上流の一覧をそのまま取り込
   - upstream: litellm
     context_from: [max_model_len, max_input_tokens]
     exclude: ["ollama/*"]              # **完全一致**。配下の実モデルは残る
+    require_alive:                     # url が応答する間だけ glob に合うものを載せる
+      - glob: "ollama/*"
+        url: http://172.28.0.1:11434/api/version
     skip_declared: true
 ```
 
-反映は再ビルド不要（config はマウントしてある）:
+config だけの変更なら再ビルド不要（config はマウントしてある）:
 
 ```bash
 docker compose restart prism-gw
+```
+
+`app.py` はイメージに焼いてある（マウントしていない）ので、こちらを変えたら再ビルド:
+
+```bash
+docker compose up -d --build prism-gw
 ```
 
 ## LiteLLM の役割
