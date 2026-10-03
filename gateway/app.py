@@ -10,6 +10,10 @@ LiteLLM も Bifrost も、上流の応答を自前のスキーマへ正規化し
 
 ここでは中継しかしない。ルーティングとヘッダの差し替えだけを行い、本文は
 `aiter_raw()` でバイトのまま流す。
+
+唯一の例外が `normalize_stream` を付けた上流 (= LiteLLM)。そこは**既に組み直された
+後**なので守るべき生バイトが無く、LiteLLM が落とした/取り違えたキーを行単位で
+補う (`_normalize_sse`)。直上流 (sglang / vLLM / llama.cpp) には一切触れない。
 """
 
 from __future__ import annotations
@@ -247,6 +251,81 @@ async def list_models(request: Request) -> Response:
     return JSONResponse({"object": "list", "data": out})
 
 
+def _normalize_chunk(chunk: dict, state: dict) -> bool:
+    """LiteLLM が組み直したチャンク 1 個を SGLang の形に寄せる。変えたら True。
+
+    Nucllei は SGLang の生フレームを正とする (vendor/nucllei/_memos/model-frames.md)。
+    LiteLLM 経由で欠ける/ずれるのは実測 (docs/gateway.md「LiteLLM 経路の差分」) で 2 点:
+
+      1. usage.reasoning_tokens が無く completion_tokens_details の下にだけある
+         → 上にも**写す** (元は残す。値を作らない、写すだけ)
+      2. tool_calls を流したのに finish_reason が "stop"
+         → ChatGPT backend の response.completed が output: [] を返し、LiteLLM の
+           responses→chat 変換がそれだけを見て "stop" に倒すため (claude 経由は正しく
+           "tool_calls")。ストリーム中に delta.tool_calls を見ていれば "tool_calls" に
+           直す。OpenAI 仕様上この組み合わせは "tool_calls" 以外にならないので安全。
+    """
+    changed = False
+    usage = chunk.get("usage")
+    if isinstance(usage, dict) and "reasoning_tokens" not in usage:
+        details = usage.get("completion_tokens_details")
+        if isinstance(details, dict) and isinstance(details.get("reasoning_tokens"), int):
+            usage["reasoning_tokens"] = details["reasoning_tokens"]
+            changed = True
+    for choice in chunk.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if isinstance(delta, dict) and delta.get("tool_calls"):
+            state["tool_calls"] = True
+        if state.get("tool_calls") and choice.get("finish_reason") == "stop":
+            choice["finish_reason"] = "tool_calls"
+            changed = True
+    return changed
+
+
+async def _normalize_sse(resp: httpx.Response):
+    """SSE を**行単位**で中継し、`data: {...}` だけ `_normalize_chunk` を通す。
+
+    バッファは行の途中までに限る (改行が来たら即座に流す) ので、上流が送った
+    タイミングはそのまま保たれる。変えた行だけ再シリアライズし (LiteLLM と同じ
+    compact / 非 ASCII 生出力)、それ以外の行と `[DONE]`・コメント行はバイトのまま。
+    JSON に見えない行は触らない。
+    """
+    state: dict = {}
+    buf = b""
+    try:
+        async for raw in resp.aiter_raw():
+            buf += raw
+            while True:
+                nl = buf.find(b"\n")
+                if nl < 0:
+                    break
+                line, buf = buf[:nl + 1], buf[nl + 1:]
+                yield _normalize_line(line, state)
+        if buf:
+            yield _normalize_line(buf, state)
+    finally:
+        await resp.aclose()
+
+
+def _normalize_line(line: bytes, state: dict) -> bytes:
+    body = line.strip()
+    if not body.startswith(b"data:"):
+        return line
+    payload = body[5:].strip()
+    if not payload.startswith(b"{"):
+        return line
+    try:
+        chunk = json.loads(payload)
+    except ValueError:
+        return line
+    if not isinstance(chunk, dict) or not _normalize_chunk(chunk, state):
+        return line
+    out = json.dumps(chunk, ensure_ascii=False, separators=(",", ":")).encode()
+    return b"data: " + out + line[len(line.rstrip(b"\r\n")):]
+
+
 async def proxy(request: Request) -> Response:
     """ボディの `model` で上流を決め、あとは素通しする。"""
     if not _authorized(request):
@@ -304,6 +383,15 @@ async def proxy(request: Request) -> Response:
         )
 
     resp = await client.send(req, stream=True)
+
+    # LiteLLM 経路だけ行単位で補正する。直上流はこの下の relay (バイト素通し)。
+    if up.get("normalize_stream") and resp.is_success:
+        return StreamingResponse(
+            _normalize_sse(resp),
+            status_code=resp.status_code,
+            headers=_response_headers(resp),
+            media_type=resp.headers.get("content-type"),
+        )
 
     async def relay():
         try:

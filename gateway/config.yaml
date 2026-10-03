@@ -23,6 +23,12 @@ upstreams:
     # compose が必ず値を渡す (未設定なら PRISM_GW_API_KEY を流用する)。
     # ここで入れ子の既定値は書かない — app.py の展開は入れ子に対応していない。
     api_key: ${LITELLM_MASTER_KEY}
+    # ストリームを行単位で SGLang の形に寄せる (**この上流だけ**。直上流には付けない)。
+    # LiteLLM は既に組み直した後なので守る生バイトが無い。やるのは 2 点だけ:
+    #   usage.completion_tokens_details.reasoning_tokens → usage.reasoning_tokens に写す
+    #   tool_calls を流したのに finish_reason:"stop" → "tool_calls" (ChatGPT backend 由来)
+    # 値は作らない。詳細は docs/gateway.md「LiteLLM 経路の差分」。
+    normalize_stream: true
 
   # Qwen3.8-Flash-Next (vLLM, 1 台構成)。**compose のサービスではない** —
   # vendor/qwen38-flash-next の start.sh が `--network host` でホストの :8888 に

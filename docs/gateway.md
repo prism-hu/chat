@@ -1,7 +1,7 @@
 # prism-gw — 唯一の入口
 
 `:4000` の `/v1` 一本を入口にし、**クライアントのキーを 1 本に束ねる**ための自前
-ゲートウェイ。`gateway/app.py`（Python / 約 250 行）と `gateway/config.yaml` だけ。
+ゲートウェイ。`gateway/app.py`（Python / 約 400 行）と `gateway/config.yaml` だけ。
 
 ```
 Nucllei / fugu / 外部 ──(PRISM_GW_API_KEY 1本)──> prism-gw :4000 /v1
@@ -51,6 +51,10 @@ LiteLLM には認証付きの生 pass-through 機能があるが **Enterprise �
   LiteLLM 1.96+ の `max_input_tokens` もここで読み替える
 - **ライブ tok/s**: 上流が対応していれば `stream_options.continuous_usage_stats` を
   **こちらで差し込む**。クライアント（Nucllei）が送らなくても効く
+- **LiteLLM 経路だけ行単位で補正**（`normalize_stream: true`）: 既に組み直された後で
+  守る生バイトが無いので、落ちたキーを写し、取り違えた `finish_reason` を直す。
+  やることは下の「LiteLLM 経路の差分」の 2 点のみで、値は作らない。直上流は従来どおり
+  `aiter_raw()` の素通し（コード上も別経路）
 - 停止中の上流は `/v1/models` から自動で消える（`vllm-qwen35` と `llamacpp-step37` は
   普段停止しているので、一覧に出るのは起動しているものだけ）
 - **Ollama が止まっている間は `ollama/...` を一覧に出さない**（`include` の
@@ -72,6 +76,10 @@ upstreams:
     base_url: http://llens.med.hokudai.ac.jp:13300/v1
     api_key: ${KIMI_API_KEY:-}
     force_continuous_usage: true      # ライブ tok/s を上流に要求する
+  litellm:
+    base_url: http://litellm:4000/v1
+    api_key: ${LITELLM_MASTER_KEY}
+    normalize_stream: true            # LiteLLM 経路だけ SSE を行単位で補正（下記）
 
 models:                                # 明示ルート
   - name: kimi-k2.6                    # クライアントから見える名前
@@ -118,6 +126,31 @@ OpenAI 互換な上流（vLLM / sglang / llama.cpp）は **LiteLLM に載せな�
 （2026-08 時点で実測）、1.82 の `/v1/models` は 4 キーしか返さないので `model_info` を
 書いてもコンテキスト長が出ない。
 
+## LiteLLM 経路の差分（2026-10-03 実測）
+
+Nucllei は SGLang の生フレーム（`vendor/nucllei/_memos/model-frames.md`）を正とする。
+`codex/gpt-5.6-luna`（LiteLLM `chatgpt/` プロバイダ、OAuth、Responses API 経由）で
+観察された 6 点を、**LiteLLM 直**（`172.28.0.2:4000`）・**ChatGPT backend 直**
+（`chatgpt.com/backend-api/codex/responses`、litellm コンテナ内から同一リクエストを再生）・
+**gw 経由**の 3 段で SSE 行ごとに到着時刻付きで採取し、`claude-sonnet-4-6` を
+LiteLLM 経路の対照にして切り分けた。
+
+| # | 現象 | 発生源 | 根拠 | gw の対応 |
+|---|---|---|---|---|
+| 1 | `usage.reasoning_tokens` が無い | **LiteLLM**（一般） | claude / codex とも `completion_tokens_details.reasoning_tokens` にだけ載る。SGLang 拡張キーを LiteLLM は知らない | **写す**。usage を持つチャンクで `completion_tokens_details.reasoning_tokens` を `usage.reasoning_tokens` にもコピー（元は残す） |
+| 2 | usage が最後の 1 回だけ | **backend**（両方） | Responses API は usage を `response.completed` でしか返さない（backend 直で確認）。Anthropic も `message_delta` 末尾のみ。`stream_options.continuous_usage_stats` を LiteLLM に送っても無視される。**途中値が存在しない**ので作りようがない | なし（数値を捏造しない）。クラウド経路はライブ tok/s 非対応のまま |
+| 3 | reasoning が終わるまで何も流れない | **backend + LiteLLM** | backend は reasoning 中、`output_item.added`（暗号化 reasoning）以外のイベントを出さない。LiteLLM proxy は中身のあるチャンクが出るまで **HTTP ヘッダすら返さない**（実測: ヘッダ到着 = 最初の content デルタ = 4.5 s）。その後の content / tool 引数は 5〜30 ms 間隔で**ちゃんと逐次流れる**（49.5 s → 1.4 s は「無音 48 s + 本文 1.4 s」であって一括到着ではない）。gw 旧版（素通し）でも新版でも行到着時刻は LiteLLM 直と一致 | なし。gw は行単位でバッファせず即時に流す |
+| 4 | reasoning が暗号化 `reasoning_items` | **backend**（+ LiteLLM の既定） | backend は `encrypted_content` のみで `summary: []`。LiteLLM は `reasoning.summary` を要求しない。**クライアントが `reasoning_effort: {"effort":"medium","summary":"auto"}` と dict で送れば** LiteLLM はそのまま通し、backend の要約が `delta.reasoning_content`（平文）で返る（実測 1 デルタ、ただし reasoning 完了後に届くので #3 の無音は解消しない）。生 CoT は出ない | なし。effort の意味が変わるので gw では差し込まない。欲しければ Nucllei 側で `codex/*` に dict を送る |
+| 5 | tool_calls を流したのに `finish_reason: "stop"` | **backend → LiteLLM** | backend の `response.completed` は `output: []`（公式 OpenAI と違い output を再掲しない）。LiteLLM の responses→chat 変換はその `output` に `function_call` があるかだけで finish_reason を決める（`completion_extras/litellm_responses_transformation/transformation.py`）ので "stop" に倒れる。claude 経由は "tool_calls" で正しい | **直す**。ストリーム中に `delta.tool_calls` を見ていて finish が "stop" なら "tool_calls" に書き換え。OpenAI 仕様上この組み合わせは他にならない |
+| 6 | 15:45 の 500 | **backend + LiteLLM（非ストリーム）** | litellm ログ 15:45:50: `ValueError: Unknown items in responses API response: []` in `transform_response`（**非ストリーム経路**）、LiteLLM が 2 回リトライして 500。`litellm/config.yaml` の注意書きどおり `codex/*` は `stream: false` だと落ちる。直前のチャット成功から 0.5 s 後の短い呼び出しなので、Nucllei のタイトル生成等の**非ストリーム補助呼び出し**が原因と見られる（1 回で backend 3 発消費） | なし。`codex/*` への補助呼び出しも `stream: true` にするのは Nucllei 側 |
+
+付随して観察した形の差（直さない）: LiteLLM の usage フレームは `choices: []` ではなく
+`choices: [{"index":0,"delta":{}}]`。role フレームは無く最初の content デルタに
+`role` が同居する。`matched_stop` は無い。
+
+補正は `gateway/app.py` の `_normalize_sse`（行単位、`data: {` の行だけ JSON を見る、
+変えた行だけ再シリアライズ、それ以外はバイトのまま）。直上流はこの経路を通らない。
+
 ## 動作確認
 
 ```bash
@@ -142,7 +175,9 @@ curl -s -N localhost:4000/v1/chat/completions -H "Authorization: Bearer $K" \
 
 - **Claude / OpenAI / Ollama はライブ tok/s が出ない。** LiteLLM を通る経路なので
   組み直しの影響を受ける。ただしクラウド API はそもそも `continuous_usage_stats` に
-  対応しておらず、失っているものは実質ない
+  対応しておらず、失っているものは実質ない（上の「LiteLLM 経路の差分」#2）
+- **`codex/*` は reasoning 中、無音。** backend が暗号化 reasoning しか出さず、LiteLLM は
+  最初の中身が出るまでヘッダも返さない（同 #3 / #4）。`stream: false` は 500（同 #6）
 - **Ollama のモデルは `max_model_len` が付かない。** LiteLLM のワイルドカード経路が
   返さないため。必要なら `include` に `context_overrides` を足す余地はある
 - キー 1 本で全モデルに到達できる = **そのキーが漏れれば全部使われる**。これは
