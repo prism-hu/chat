@@ -82,17 +82,22 @@ GPU と統合メモリを丸ごと使うので、**ローカルモデルは常�
 
 | モデル | 起動 | 停止 |
 |---|---|---|
-| **Qwen3.8-Flash-Next** (vLLM, 1 台) | `cd vendor/qwen38-flash-next && ./start.sh` | `./stop.sh` |
+| **Qwen3.8-Flash-Next** (vLLM, 1 台) | `docker compose --profile heavy up -d vllm-qwen38-fn` | `docker compose stop vllm-qwen38-fn` |
 | Qwen3.8-27B (SGLang) | `docker compose --profile heavy up -d sglang-qwen38` | `docker compose stop sglang-qwen38` |
 | Qwen3.5-122B (vLLM) | `docker compose --profile heavy up -d vllm-qwen35` | `docker compose stop vllm-qwen35` |
 | Qwen3.6-35B (vLLM) | `docker compose --profile heavy up -d vllm-qwen36` | `docker compose stop vllm-qwen36` |
 | Step-3.7-Flash (llama.cpp) | `docker compose --profile heavy up -d llamacpp-step37` | `docker compose stop llamacpp-step37` |
 
-Flash-Next だけは compose のサービスではなく `vendor/qwen38-flash-next` の
-submodule（[MiaAI-Lab のレシピ](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark)）で動かす。
-イメージ内の vLLM にパッチを当て、51B の PLE テーブルを mmap するため、
-素の compose では再現できないため。`--network host` でホストの `:8888` に立ち、
-prism-gw はブリッジ GW 経由（`172.28.0.1:8888`）で見る（ollama と同じ形）。
+Flash-Next の中身は `vendor/qwen38-flash-next` の
+submodule（[MiaAI-Lab のレシピ](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark)）。
+イメージ内の vLLM にパッチを当て、51B の PLE テーブルを mmap する。compose の
+`vllm-qwen38-fn` はレシピの `start.sh --no-launch` が出す `docker run` を写したもので
+（2026-10-06）、**パッチ済みファイルと PLE テーブルは `start.sh` の生成物**。submodule を
+更新したら先に `cd vendor/qwen38-flash-next && ./start.sh --no-launch` を流す。
+util と cgroup 上限は固定値で、レシピの memwatch（メモリ見張り）は付かない。
+起動前に `sudo sysctl -p vendor/qwen38-flash-next/files/sysctl-spark3.conf`（再起動で消える）。
+`network_mode: host` でホストの `:8888` に立ち、prism-gw はブリッジ GW 経由
+（`172.28.0.1:8888`）で見る（ollama と同じ形）。
 
 **大物 3 つはいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
 profile）。`docker compose up -d` で上がるのは `prism-gw` / `litellm` / `nucllei`

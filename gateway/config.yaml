@@ -30,10 +30,10 @@ upstreams:
     # 値は作らない。詳細は docs/gateway.md「LiteLLM 経路の差分」。
     normalize_stream: true
 
-  # Qwen3.8-Flash-Next (vLLM, 1 台構成)。**compose のサービスではない** —
-  # vendor/qwen38-flash-next の start.sh が `--network host` でホストの :8888 に
-  # 立てるので、ollama と同じくブリッジ GW 経由で見る。起動/停止は
-  #   cd vendor/qwen38-flash-next && ./start.sh   /   ./stop.sh
+  # Qwen3.8-Flash-Next (vLLM, 1 台構成)。compose の vllm-qwen38-fn が
+  # `network_mode: host` でホストの :8888 に立てるので、ollama と同じくブリッジ GW
+  # 経由で見る。起動/停止は
+  #   docker compose --profile heavy up -d vllm-qwen38-fn   /   docker compose stop vllm-qwen38-fn
   # **27B (sglang-qwen38) とは排他。** 先に `docker compose stop sglang-qwen38`。
   # 詳細は docs/qwen3.8-flash-next-tp2.md。
   qwen38-flash-next:

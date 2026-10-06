@@ -421,6 +421,95 @@ services:
     # するまでは手動起動。安定したら always に変える。
     restart: "no"
 
+  # Qwen3.8-Flash-Next (MiaAI-Lab のレシピ / vendor/qwen38-flash-next) を compose で。
+  # 中身は `./start.sh --no-launch` が出す docker run (.last_launch.sh) をそのまま
+  # 写したもの (2026-10-06)。start.sh との違い:
+  #   - util と cgroup 上限は start.sh がその時の MemAvailable から算出する値の
+  #     固定値 (GMU 0.728 / 93g, HOST_RESERVE_GIB=33)。KV ~9.7GiB
+  #   - memwatch (MemAvailable が尽きたら止める見張り) は付かない
+  #   - パッチ済みファイル (files/*_patched.py, gitignore) と PLE packed table は
+  #     start.sh が作る生成物。submodule を更新したら先に
+  #       cd vendor/qwen38-flash-next && ./start.sh --no-launch
+  # 起動前に sysctl (files/sysctl-spark3.conf) が入っていること。再起動で消える。
+  # ホストの :8888 に立ち、prism-gw は 172.28.0.1:8888 で見る (gateway/config.yaml)。
+  # **他の大物 (vllm-qwen35 等) とも DeepSeek (vendor/deepseek-v4-flash-dspark) とも排他。**
+  vllm-qwen38-fn:
+    profiles: ["heavy"]
+    image: vllm/vllm-openai:qwen38-flash-next
+    pull_policy: never   # start.sh が用意するローカルイメージ
+    container_name: vllm-qwen38-fn
+    network_mode: host
+    ipc: host
+    cap_add: [SYS_NICE, SYS_PTRACE]
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    mem_limit: 93g
+    memswap_limit: 93g
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "3"
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_PLE_CPU_OFFLOAD=1
+      - VLLM_PLE_PACKED_TABLE_DIR=/root/.cache/vllm/ple_cache/Mia-AiLab--Qwen3.8-Flash-Next-NVFP4
+      - VLLM_PLE_OFFLOAD_STEP_TIMEOUT=300
+      - VLLM_MTP_DRAFT_VOCAB=/root/draft_vocab.txt
+      - VLLM_USE_V2_MODEL_RUNNER=1
+      - MAX_JOBS=2
+      - FLASHINFER_NVCC_THREADS=1
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/.cache/vllm:/root/.cache/vllm
+      - ./vendor/qwen38-flash-next/files/draft_vocab_ja_en_code_65k.txt:/root/draft_vocab.txt:ro
+      - ./vendor/qwen38-flash-next/files/chat-template/chat_template.jinja:/root/chat_template.jinja:ro
+      - ./vendor/qwen38-flash-next/files/ple_layer_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ple_layer.py:ro
+      - ./vendor/qwen38-flash-next/files/modelopt_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
+      - ./vendor/qwen38-flash-next/files/qsa_ops_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ops/qsa.py:ro
+      - ./vendor/qwen38-flash-next/files/qsa_nvidia_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/qsa.py:ro
+      - ./vendor/qwen38-flash-next/files/mtp_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/mtp.py:ro
+      - ./vendor/qwen38-flash-next/files/ple_offload/ple_offload_layer.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/ple_offload_layer.py:ro
+      - ./vendor/qwen38-flash-next/files/ple_offload/connector.py:/usr/local/lib/python3.12/dist-packages/vllm/v1/ple_offload/connector.py:ro
+      - ./vendor/qwen38-flash-next/files/ple_offload/worker.py:/usr/local/lib/python3.12/dist-packages/vllm/v1/ple_offload/worker.py:ro
+      - ./vendor/qwen38-flash-next/files/ple_offload/protocol.py:/usr/local/lib/python3.12/dist-packages/vllm/v1/ple_offload/protocol.py:ro
+    # ENTRYPOINT は ["vllm","serve"]
+    command:
+      - Mia-AiLab/Qwen3.8-Flash-Next-NVFP4
+      - --served-model-name=qwen3.8-flash-next
+      - --host=172.28.0.1   # prism-gw のブリッジ GW。外には出さない
+      - --port=8888
+      - --enable-prompt-tokens-details
+      - --tensor-parallel-size=1
+      - --gpu-memory-utilization=0.728
+      - --max-num-seqs=4
+      - --max-num-batched-tokens=8192
+      - --max-model-len=262144
+      - --kv-cache-dtype=auto
+      - --mamba-ssm-cache-dtype=bfloat16
+      - --load-format=safetensors
+      - --safetensors-load-strategy=lazy
+      - --enable-chunked-prefill
+      - --reasoning-parser=qwen3
+      - --enable-auto-tool-choice
+      - --chat-template=/root/chat_template.jinja
+      - --tool-call-parser=qwen3_xml
+      - --distributed-executor-backend=mp
+      - '--speculative-config={"method":"mtp","num_speculative_tokens":3,"use_local_argmax_reduction":true}'
+      - '--compilation-config={"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16]}'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: "no"
+
 volumes:
   nucllei:
 
