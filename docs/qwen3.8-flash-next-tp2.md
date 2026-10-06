@@ -317,7 +317,7 @@ touch vendor/qwen38-flash-next/logs/archive/00000000T000000-container.log
 32% しか覆わない（jawiki の held-out 41 MiB で計測）。スペイン語版と同じ手順
 （`files/build_draft_vocab_extend.py`、47k を床にして頻度順に 65,536 行まで）で、
 jawiki 402 MiB（`wikimedia/wikipedia` `20231101.ja` の先頭 28,000 記事）から
-`draft_vocab_ja_en_code_65k.txt` を作った。held-out で 99.5%。**このファイルも管理外。**
+`draft_vocab_ja_en_code_65k.txt` を作った。held-out で 99.5%。このリポジトリの `qwen38-flash-next/` に置いてあり（2026-10-07 から。それまでは vendor 内の管理外ファイルだった）、compose の `vllm-qwen38-fn` はそこをマウントする。
 
 gw 越し・medium・単発の decode tok/s（47k は 4 回、65k は 3 回の幅）:
 

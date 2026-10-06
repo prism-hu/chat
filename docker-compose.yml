@@ -411,7 +411,8 @@ services:
     volumes:
       - ${HOME}/.cache/huggingface:/root/.cache/huggingface
       - ${HOME}/.cache/vllm:/root/.cache/vllm
-      - ./vendor/qwen38-flash-next/files/draft_vocab_ja_en_code_65k.txt:/root/draft_vocab.txt:ro
+      # 日本語を足した MTP の draft 語彙 (ここで作ったもの。docs/qwen3.8-flash-next-tp2.md)
+      - ./qwen38-flash-next/draft_vocab_ja_en_code_65k.txt:/root/draft_vocab.txt:ro
       - ./vendor/qwen38-flash-next/files/chat-template/chat_template.jinja:/root/chat_template.jinja:ro
       - ./vendor/qwen38-flash-next/files/ple_layer_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ple_layer.py:ro
       - ./vendor/qwen38-flash-next/files/modelopt_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/modelopt.py:ro
