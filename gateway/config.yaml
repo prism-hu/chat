@@ -36,15 +36,39 @@ upstreams:
   #   docker compose --profile heavy up -d vllm-qwen38-fn   /   docker compose stop vllm-qwen38-fn
   # **27B (sglang-qwen38) とは排他。** 先に `docker compose stop sglang-qwen38`。
   # 詳細は docs/qwen3.8-flash-next-tp2.md。
+  # 2 台構成 (qwen38-flash-next-dual/start.sh, nvidia NVFP4) も同じ ID `qwen3.8-flash-next` で
+  # 同じ 172.28.0.1:8888 に立つので、この上流とルートがそのまま使われる (どちらか一方だけ動かす)。
   qwen38-flash-next:
     base_url: http://172.28.0.1:8888/v1
     force_continuous_usage: true
+
+  # DeepSeek-V4-Flash Vision-Exp (vLLM TP=2: enda-spark head + gx10 worker over CX7)。
+  # vendor/deepseek-v4-flash-dspark の start-deepseek-v4-flash-dspark.sh が立てる。
+  # **Flash-Next と同じ 172.28.0.1:8888** (排他運用)。一覧はモデル ID で突き合わせる
+  # ので、上流を分けておけば動いている方だけが /v1/models に出る。
+  deepseek-v4-flash:
+    base_url: http://172.28.0.1:8888/v1
+    force_continuous_usage: true
+
+  # GLM-5.3-Flash EXL3 (TensorFold TP=2: enda-spark head + gx10 worker over CX7)。
+  # glm53-flash/start.sh / stop.sh (vendor/glm53-flash-exl3)。これも 172.28.0.1:8888 で排他。
+  # force_continuous_usage は付けない: TensorFold が stream_options.continuous_usage_stats を
+  # 受け付けるか未確認 (パッチにも記述が無い)。確かめてから付ける。
+  glm53-flash:
+    base_url: http://172.28.0.1:8888/v1
 
   # SGLang (Qwen3.8-27B)。continuous_usage_stats に対応しているので有効化する。
   # **LiteLLM には載せない** — 通すと max_model_len とストリーム中の累積 usage が
   # 消える (docs/gateway.md)。この 2 つが欲しくて SGLang を選んでいるので本末転倒。
   sglang-qwen38:
     base_url: http://sglang-qwen38:8000/v1
+    force_continuous_usage: true
+
+  # 同じ Qwen3.8-27B を SGLang TP=2 (enda-spark head + gx10 worker over CX7) で。
+  # qwen38-27b-tp2/start.sh / stop.sh。served name は同じ `qwen38` なので、上と比べられるよう
+  # 上流とルートを分けてある。172.28.0.1:8888 で他のローカル大物と排他。
+  sglang-qwen38-tp2:
+    base_url: http://172.28.0.1:8888/v1
     force_continuous_usage: true
 
   vllm-qwen36:
@@ -68,8 +92,34 @@ models:
     upstream: qwen38-flash-next
     upstream_model: qwen3.8-flash-next
 
+  - name: deepseek-v4-flash
+    upstream: deepseek-v4-flash
+    upstream_model: deepseek-v4-flash-vision-exp
+    # 公式推奨 (model card: temperature 1.0, top_p 0.95)。クライアントが送ればそちらが通る。
+    # 思考の強さは DEFAULT_THINKING=high (.env.dspark)。DeepSeek V4 は low/high/max の 3 段で medium は無い
+    defaults:
+      temperature: 1.0
+      top_p: 0.95
+
+  # 窓は glm53-flash/env.sh の CONTEXT (262144)。/v1/models が max_model_len を返さなければ
+  # ここに context: 262144 を書く (未確認)。サンプリングはチェックポイント既定 (1.0 / 0.95) が効く。
+  - name: glm-5.3-flash
+    upstream: glm53-flash
+    upstream_model: GLM-5.3-Flash-EXL3
+    # TensorFold の /v1/models は max_model_len を返さないので明示 (glm53-flash/env.sh の CONTEXT と揃える)
+    context: 262144
+    # GLM のテンプレートは reasoning_effort 未指定だと max で考え、止まらないことがある。
+    # 2026-10-07 の評価 (evals/results/compare-20261007-0521.md) で low が速さ・安定・品質の
+    # バランス最良 (23 問 237 s / 打ち切り 0)。クライアントが送ればそちらが通る。
+    defaults:
+      reasoning_effort: low
+
   - name: qwen3.8-27b
     upstream: sglang-qwen38
+    upstream_model: qwen38
+
+  - name: qwen3.8-27b-tp2
+    upstream: sglang-qwen38-tp2
     upstream_model: qwen38
 
   - name: qwen3.6-35b

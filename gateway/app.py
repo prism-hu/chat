@@ -75,6 +75,8 @@ class Config:
                 "upstream": m["upstream"],
                 "upstream_model": m.get("upstream_model", name),
                 "context": m.get("context"),
+                # クライアントが送らなかったキーだけ補う既定値 (送られた値は素通し)
+                "defaults": m.get("defaults") or {},
             }
 
     def upstream(self, name: str) -> dict:
@@ -345,6 +347,8 @@ async def proxy(request: Request) -> Response:
         up = cfg.upstream(route["upstream"])
         if route["upstream_model"] != model:
             payload["model"] = route["upstream_model"]
+        for k, v in route["defaults"].items():
+            payload.setdefault(k, v)
     elif cfg.includes:
         # 明示ルートに無いものは最初の include 先 (= LiteLLM) に投げる
         up = cfg.upstream(cfg.includes[0]["upstream"])
