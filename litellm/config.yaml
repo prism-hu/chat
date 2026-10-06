@@ -67,6 +67,14 @@ model_list:
   #   litellm_params.model `chatgpt/...` **プロバイダ選択子。変更不可。**
   #                                    litellm はこの前置きで chatgpt プロバイダ
   #                                    (OAuth 認証) に振り分ける。
+  #   `chatgpt/responses/...`             の `responses/` は **必須** (2026-10-06)。
+  #                                    無いと litellm は chat/completions か
+  #                                    Responses かを起動時に GitHub から取る
+  #                                    モデル表で決める。ホスト再起動直後は DNS 前に
+  #                                    取得が失敗して同梱の古い表に落ち、そこに
+  #                                    gpt-5.x が無いため存在しない
+  #                                    /backend-api/codex/chat/completions を叩き、
+  #                                    Cloudflare のチャレンジ HTML (403) が返る。
   #
   # `codex/` は「Codex CLI の OAuth 枠から出ている」という意味で、**Codex モデル
   # という意味ではない**。皮肉なことに本物の codex-* は下記のとおり全部使えない。
@@ -121,19 +129,19 @@ model_list:
   #     グレー。アカウント停止のリスクは自分持ちで使うこと。
   - model_name: codex/gpt-5.6-sol
     litellm_params:
-      model: chatgpt/gpt-5.6-sol
+      model: chatgpt/responses/gpt-5.6-sol
 
   - model_name: codex/gpt-5.6-terra
     litellm_params:
-      model: chatgpt/gpt-5.6-terra
+      model: chatgpt/responses/gpt-5.6-terra
 
   - model_name: codex/gpt-5.6-luna
     litellm_params:
-      model: chatgpt/gpt-5.6-luna
+      model: chatgpt/responses/gpt-5.6-luna
 
   - model_name: codex/gpt-5.5
     litellm_params:
-      model: chatgpt/gpt-5.5
+      model: chatgpt/responses/gpt-5.5
 
   # --- Gemini (Google AI Studio の Gemini Developer API 直) ---
   # キーは ~/chat/.env の GEMINI_API_KEY (https://aistudio.google.com/apikey)。
