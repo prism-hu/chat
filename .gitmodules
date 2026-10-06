@@ -7,3 +7,6 @@
 [submodule "vendor/qwen38-flash-next"]
 	path = vendor/qwen38-flash-next
 	url = https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark
+[submodule "vendor/deepseek-v4-flash-dspark"]
+	path = vendor/deepseek-v4-flash-dspark
+	url = https://github.com/MiaAI-Lab/DeepSeek-v4-Flash-DSpark-2x-DGX-Spark
