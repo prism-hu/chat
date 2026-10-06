@@ -51,10 +51,6 @@ upstreams:
     base_url: http://vllm-qwen36:8000/v1
     force_continuous_usage: true
 
-  vllm-qwen35:
-    base_url: http://vllm-qwen35:8000/v1
-    force_continuous_usage: true
-
   llamacpp-step37:
     base_url: http://llamacpp-step37:8000/v1
 
@@ -81,9 +77,6 @@ models:
     upstream_model: qwen36
 
   # 停止中のサービス。上流に繋がらない間は /v1/models から自動的に外れる。
-  - name: qwen3.5-122b-custom
-    upstream: vllm-qwen35
-    upstream_model: qwen
   - name: step-3.7-flash
     upstream: llamacpp-step37
     upstream_model: step37

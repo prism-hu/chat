@@ -7,7 +7,6 @@
 Nucllei / fugu / 外部 ──(PRISM_GW_API_KEY 1本)──> prism-gw :4000 /v1
                                                ├─ kimi-k2.6       → sglang (llens)   透過
                                                ├─ qwen3.6-35b     → vLLM             透過
-                                               ├─ qwen3.5-122b-custom → vLLM         透過
                                                ├─ step-3.7-flash  → llama.cpp        透過
                                                └─ その他           → LiteLLM          (Claude / OpenAI / Ollama)
 ```
@@ -55,7 +54,7 @@ LiteLLM には認証付きの生 pass-through 機能があるが **Enterprise �
   守る生バイトが無いので、落ちたキーを写し、取り違えた `finish_reason` を直す。
   やることは下の「LiteLLM 経路の差分」の 2 点のみで、値は作らない。直上流は従来どおり
   `aiter_raw()` の素通し（コード上も別経路）
-- 停止中の上流は `/v1/models` から自動で消える（`vllm-qwen35` と `llamacpp-step37` は
+- 停止中の上流は `/v1/models` から自動で消える（heavy profile の GPU サービスは
   普段停止しているので、一覧に出るのは起動しているものだけ）
 - **Ollama が止まっている間は `ollama/...` を一覧に出さない**（`include` の
   `require_alive`）。LiteLLM は Ollama に繋がらないと静的な組み込みリストに

@@ -5,7 +5,7 @@
 # ベースは https://github.com/stevibe/step37-flash-dgx-spark (MIT) の Dockerfile。
 # 取り込みにあたって変えたのは以下:
 #   - モデルの自動ダウンロード用 entrypoint を落とした
-#     (このリポジトリはモデルを host の ${MODELS_DIR} に置く方式。vllm-qwen35 と同じ)
+#     (このリポジトリはモデルを host の ${MODELS_DIR} に置く方式。vllm-qwen36 と同じ)
 #   - 起動フラグは entrypoint に埋めず docker-compose.yml の command に出した
 #   - よって huggingface_hub / jq などランタイム用の追加パッケージも不要
 #
@@ -40,8 +40,8 @@ WORKDIR /opt/llama.cpp
 
 # 121 = GB10 (DGX Spark)。他アーキ向けにビルドしないので nvcc は 1 パスで済む。
 ARG CMAKE_CUDA_ARCHITECTURES=121
-# nvcc は 1 ジョブあたり数 GB 食う。vllm-qwen35 を上げたままビルドするとホストの
-# RAM が足りない (122B が ~100GB 保持している)。増やすなら先に qwen を止めること。
+# nvcc は 1 ジョブあたり数 GB 食う。他の大物 (GPU サービス) を上げたままビルドすると
+# ホストの RAM が足りない。増やすなら先に大物を止めること。
 ARG BUILD_JOBS=2
 
 # ビルド時には driver (libcuda.so) が無いので stub とリンクする。実行時は

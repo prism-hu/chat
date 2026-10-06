@@ -18,7 +18,7 @@ DGX Spark (GB10 / 128GB 統合メモリ / sm121 / aarch64) で動かすための
 
 ## なぜ vLLM ではなく llama.cpp なのか
 
-`vllm-qwen35` と同じ流儀で vLLM に載せることは**できない**。配布されている量子化の
+vLLM に載せることは**できない**。配布されている量子化の
 実サイズが 128GB 統合メモリ (実際に使えるのは ~119GB) に収まらない:
 
 | 配布形式 | サイズ | 判定 |
@@ -40,7 +40,7 @@ llama.cpp の Step3.7 対応は上流 ggml-org/llama.cpp の
 weights 105GB + mmproj 4GB で **109GB**。残りは ~10GB しかなく、そこに KV cache と
 compute buffer と OS (Xorg も動いている) が同居する。だから:
 
-- **`vllm-qwen35` とは同時に起動できない。** 片方を止めてもう片方を上げる。
+- **他の大物 (vllm-qwen36 等) とは同時に起動できない。** 片方を止めてもう片方を上げる。
 - KV cache は `q8_0` に量子化して詰める。
 - 既定のコンテキストは **64K**。256K まで上げられるが、下の「256K まで伸ばす」を参照。
 - **`--parallel 1` は事実上必須。** 統合メモリ機では llama.cpp が新旧のコンテキスト
@@ -48,7 +48,7 @@ compute buffer と OS (Xorg も動いている) が同居する。だから:
 
 ## モデルの取得
 
-`vllm-qwen35` と同じく、host の `${MODELS_DIR}` (既定 `~/models`) に置く。
+他のサービスと同じく、host の `${MODELS_DIR}` (既定 `~/models`) に置く。
 
 ```bash
 hf download stepfun-ai/Step-3.7-Flash-GGUF \
@@ -81,8 +81,8 @@ llama.cpp は **上流 ggml-org の master** を使う (build arg の既定)。S
 場合は `LLAMACPP_REPO` / `LLAMACPP_REF` を上書きする。
 
 ```bash
-# ビルドは qwen を止めてから (nvcc がホスト RAM を食う。122B が ~100GB 保持している)
-docker compose stop vllm-qwen35
+# ビルドは動いている大物を止めてから (nvcc がホスト RAM を食う)
+docker compose stop vllm-qwen36 sglang-qwen38 vllm-qwen38-fn
 docker compose build llamacpp-step37          # 初回 ~20-40 分
 docker compose up -d --no-deps llamacpp-step37
 
@@ -90,11 +90,10 @@ docker compose up -d --no-deps llamacpp-step37
 docker compose logs -f llamacpp-step37
 ```
 
-qwen に戻す:
+止める:
 
 ```bash
 docker compose stop llamacpp-step37
-docker compose up -d --no-deps vllm-qwen35
 ```
 
 `--no-deps` を付けるのは、他サービスを巻き込んで再作成しないため。

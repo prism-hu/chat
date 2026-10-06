@@ -5,9 +5,8 @@ models/.cache/
 .env
 .venv/
 
-# Large build artifacts (docker image tarballs etc.) — keep only the README
+# Large build artifacts (docker image tarballs etc.)
 artifacts/*
-!artifacts/README.md
 
 _links/
 

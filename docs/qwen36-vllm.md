@@ -21,8 +21,8 @@ systemd を触る必要がある。vLLM + NVFP4 なら **+38%** 速く、設定�
 
 ### イメージは上流公式 (`vllm/vllm-openai`)
 
-このスタックには Qwen3.5-122B 用にカスタム SM121 ビルド
-(`ghcr.io/prism-hu/vllm-qwen35-v2`) があるが、**Qwen3.6 には使えない**。
+このスタックには以前 Qwen3.5-122B 用のカスタム SM121 ビルド
+(`ghcr.io/prism-hu/vllm-qwen35-v2`、撤去済み) があったが、**Qwen3.6 には使えなかった**。
 
 | イメージ | vLLM | 結果 |
 |---|---|---|
@@ -34,9 +34,9 @@ systemd を触る必要がある。vLLM + NVFP4 なら **+38%** 速く、設定�
 は `12.0` 止まりで sm_121 を含まないが、Blackwell は sm_120 の cubin が sm_121 で
 動くため問題ない (`torch.cuda.get_arch_list()` → `sm_120` / device cc `(12,1)` で実機確認)。
 
-> **ENTRYPOINT の違いに注意。** 上流は `["vllm","serve"]`、カスタムビルドは `["vllm"]`。
+> **ENTRYPOINT の違いに注意。** 上流は `["vllm","serve"]`、旧カスタムビルドは `["vllm"]`。
 > compose の `command:` に `serve` を書くと上流では `vllm serve serve ...` になって
-> 起動しない。**モデルは `--model=` で渡す**（vllm-qwen35 の位置引数スタイルとは別）。
+> 起動しない。**モデルは `--model=` で渡す**（旧 vllm-qwen35 の位置引数スタイルとは別）。
 
 ## モデルの取得
 
@@ -50,15 +50,15 @@ hf download nvidia/Qwen3.6-35B-A3B-NVFP4 --local-dir ~/models/qwen36-35b-a3b-nvf
 ## 起動
 
 ```bash
-# vllm-qwen35 / llamacpp-step37 とは排他。動いていれば先に止める
-docker compose stop vllm-qwen35
+# 他の大物とは排他。動いていれば先に止める
+docker compose stop llamacpp-step37 sglang-qwen38 vllm-qwen38-fn
 docker compose up -d --no-deps vllm-qwen36     # ロード ~140s + エンジン初期化 ~145s
 docker compose logs -f vllm-qwen36             # `Application startup complete` を待つ
 ```
 
 **`--force-recreate` を使わないこと。** 短時間に recreate を重ねると warmup 中断で
 GPU が汚れ、次回起動が `CUDA error: an illegal instruction was encountered` で落ちる
-(`docs/qwen35-vllm.md`)。起動が失敗した後は `docker compose rm -f vllm-qwen36` で
+(旧 Qwen3.5-122B 運用で踏んだ)。起動が失敗した後は `docker compose rm -f vllm-qwen36` で
 コンテナを消してから、`up -d` を 1 回だけ。
 
 ## パラメータ

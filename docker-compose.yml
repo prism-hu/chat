@@ -194,72 +194,19 @@ services:
     # 他の大物と同じ。安定するまで手動起動。
     restart: "no"
 
-  # Qwen3.5-122B-A10B (INT4+FP8 hybrid, MTP-2) served by vLLM, optimized for the
-  # DGX Spark (SM121). Image pulled from GHCR; model prepared on host via
-  # scripts/fetch-model.sh. Build/versions/troubleshooting: docs/qwen35-vllm.md.
-  vllm-qwen35:
-    # **既定では起動しない (2026-09-22)。** profile に入れてあるので
-    # `docker compose up -d` では上がらず、明示したときだけ上がる:
-    #   docker compose --profile heavy up -d vllm-qwen35
-    #   docker compose stop vllm-qwen35        # 止める
-    # 理由: 122B のウェイトが統合メモリを ~100GB 占有し、ホストの空きが 15% を
-    # 切る。Hermes のダッシュボードが "Your agent is running low on memory."
-    # (elevated: MemAvailable < 15%) を出し続ける状態になる。実測で
-    # MemAvailable 11.5GB / 124.6GB = 9.3%。fugu 自体は 760MB しか使っていない。
-    # restart も always をやめた。always のままだと profile で既定から外しても
-    # docker daemon 再起動で復活してしまい、「既定停止」にならない。
-    profiles: ["heavy"]
-    # Pulled from GHCR (built on the DGX Spark, pushed to prism-hu). Rebuild only
-    # if needed: vendor/qwen35-spark/install.sh, then docker push (see docs).
-    image: ${VLLM_QWEN35_IMAGE:-ghcr.io/prism-hu/vllm-qwen35-v2:latest}
-    pull_policy: missing
-    container_name: vllm-qwen35
-    ipc: host
-    # TZ takes effect on the NEXT vllm restart (don't recreate just for this — it
-    # reloads the 122B model). Only affects log timestamps; inference is unaffected.
-    environment:
-      - TZ=${TZ:-Asia/Tokyo}
-    volumes:
-      - ${MODELS_DIR:-./models}:/models
-    command:
-      - serve
-      - ${QWEN_MODEL_PATH:-/models/qwen35-122b-hybrid-int4fp8}
-      - --served-model-name=qwen
-      - --port=8000
-      - --max-model-len=262144
-      - --gpu-memory-utilization=0.85
-      - --reasoning-parser=qwen3
-      - --enable-auto-tool-choice
-      - --tool-call-parser=qwen3_xml
-      - --generation-config=auto
-      # Qwen3.5 thinking-mode recommended sampling (HF model card). Merges over the
-      # checkpoint's generation_config.json (which ships temp=0.6) as server-side
-      # defaults; clients can still override per-request. Applies after next restart.
-      - '--override-generation-config={"temperature":1.0,"top_p":0.95,"top_k":20,"presence_penalty":1.5}'
-      - --attention-backend=FLASHINFER
-      - '--speculative-config={"method":"mtp","num_speculative_tokens":2}'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    restart: "no"        # 既定停止なので always にしない (上記)
-
   # Qwen3.6-35B-A3B (NVFP4) — 総 35B / アクティブ 3B の MoE VLM。vision + tools +
   # thinking、ctx 262144。アーキテクチャは Qwen3.5 と同一
-  # (Qwen3_5MoeForConditionalGeneration) だが、**vllm-qwen35 のカスタムイメージでは
-  # 動かない** (下記)。実測 decode 78.5 t/s = ollama の Q4_K_M (57 t/s) の +38%。
+  # (Qwen3_5MoeForConditionalGeneration) だが、**旧 Qwen3.5-122B 用のカスタムイメージでは
+  # 動かなかった** (下記)。実測 decode 78.5 t/s = ollama の Q4_K_M (57 t/s) の +38%。
   #
   # 重みは NVIDIA 公式 NVFP4 (modelopt MIXED_PRECISION) で 20.4GiB + FP8 KV:
   #   hf download nvidia/Qwen3.6-35B-A3B-NVFP4 --local-dir ~/models/qwen36-35b-a3b-nvfp4
   #
-  # vllm-qwen35 / llamacpp-step37 とは排他 (GPU を丸ごと使う)。ただし本体が軽いので
+  # 他の大物 (llamacpp-step37 等) とは排他 (GPU を丸ごと使う)。ただし本体が軽いので
   # gpu-memory-utilization を絞ってあり、ホストの ollama とは同居できる。
   # 計測値・不採用にした選択肢の記録: docs/qwen36-vllm.md
   vllm-qwen36:
-    # **既定では起動しない。** 大物 3 つは排他なので、profile を付けて
+    # **既定では起動しない。** 大物は排他なので、profile を付けて
     # `docker compose up -d` では上がらないようにしてある:
     #   docker compose --profile heavy up -d vllm-qwen36
     profiles: ["heavy"]
@@ -267,7 +214,7 @@ services:
     # arch_list は sm_120 までだが GB10 (cc 12.1) で動くことを実機確認済み
     # (Blackwell は sm_120 の cubin が sm_121 で動く)。
     #
-    # カスタム SM121 ビルド (ghcr.io/prism-hu/vllm-qwen35-v2, 0.19.1.dev0) は
+    # 旧カスタム SM121 ビルド (ghcr.io/prism-hu/vllm-qwen35-v2, 0.19.1.dev0, 撤去済み) は
     # NVFP4 の MoE を読めず `KeyError: layers.0.mlp.experts.w2_input_scale` で落ちる。
     # NGC 版 (nvcr.io/nvidia/vllm:26.07-py3, 0.24.0) は動くが decode が遅く
     # (76.8 t/s)、DSpark スペキュレータにも非対応。上流が最良。
@@ -279,7 +226,7 @@ services:
       - TZ=${TZ:-Asia/Tokyo}
     volumes:
       - ${MODELS_DIR:-./models}:/models
-    # !! このイメージの ENTRYPOINT は ["vllm","serve"] !! カスタムイメージ (["vllm"])
+    # !! このイメージの ENTRYPOINT は ["vllm","serve"] !! 旧カスタムイメージ (["vllm"])
     # と違い `serve` を書くと `vllm serve serve ...` になって起動しない。
     command:
       - --model=${QWEN36_MODEL_PATH:-/models/qwen36-35b-a3b-nvfp4}
@@ -324,15 +271,13 @@ services:
   #   hf download stepfun-ai/Step-3.7-Flash-GGUF --include "IQ4_XS/*" \
   #     --include "mmproj-step3.7-flash-f16.gguf" --local-dir ~/models/step37-flash-iq4xs
   #
-  # 現状は停止中 (速度が実用に届かず vllm-qwen35 に戻した。docs 参照)。
+  # 現状は停止中 (速度が実用に届かなかった。docs 参照)。
   #
-  # !! vllm-qwen35 とは同時に起動できない (105GB + 100GB > 128GB 統合メモリ) !!
-  #   docker compose stop vllm-qwen35
-  #   docker compose up -d --build --no-deps llamacpp-step37
-  # 戻すときは逆順。設定は両方残してあるので切り替えるだけ。
+  # !! 他の大物とは同時に起動できない (統合メモリ 128GB に収まらない)。先に止めてから:
+  #   docker compose --profile heavy up -d --build --no-deps llamacpp-step37
   # 詳細・チューニング・出典: docs/step37-llamacpp.md
   llamacpp-step37:
-    # **既定では起動しない。** 上の vllm-qwen35 / vllm-qwen36 と同じ heavy profile:
+    # **既定では起動しない。** 上の vllm-qwen36 と同じ heavy profile:
     #   docker compose --profile heavy up -d llamacpp-step37
     profiles: ["heavy"]
     image: llamacpp-step37:local
@@ -432,7 +377,7 @@ services:
   #       cd vendor/qwen38-flash-next && ./start.sh --no-launch
   # 起動前に sysctl (files/sysctl-spark3.conf) が入っていること。再起動で消える。
   # ホストの :8888 に立ち、prism-gw は 172.28.0.1:8888 で見る (gateway/config.yaml)。
-  # **他の大物 (vllm-qwen35 等) とも DeepSeek (vendor/deepseek-v4-flash-dspark) とも排他。**
+  # **他の大物 (vllm-qwen36 等) とも DeepSeek (vendor/deepseek-v4-flash-dspark) とも排他。**
   vllm-qwen38-fn:
     profiles: ["heavy"]
     image: vllm/vllm-openai:qwen38-flash-next

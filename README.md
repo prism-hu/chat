@@ -27,7 +27,6 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 | [docs/qwen3.8-27b-serving.md](docs/qwen3.8-27b-serving.md) | Qwen3.8-27B を GB10 で serve する調査（ランタイム比較・チェックポイント選定・sm_121 のハマりどころ） |
 | [docs/dgx-spark-tp2.md](docs/dgx-spark-tp2.md) | Spark 2 台 / TP=2 に増設する場合 |
 | [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next と TP=2（結論: 1 台で回すべき） |
-| [docs/qwen35-vllm.md](docs/qwen35-vllm.md) | Qwen3.5-122B カスタム vLLM のビルドと運用 |
 | [docs/qwen36-vllm.md](docs/qwen36-vllm.md) | Qwen3.6-35B-A3B (NVFP4) の計測と、不採用にした選択肢 |
 | [docs/step37-llamacpp.md](docs/step37-llamacpp.md) | Step-3.7-Flash (llama.cpp) の切り替えとチューニング |
 
@@ -41,9 +40,8 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 | LiteLLM | 形式変換が要る上流（Anthropic / OpenAI / Gemini / ChatGPT サブスク）と Ollama の列挙を担当。**ホストには公開しない**（prism-gw の後ろだけ） |
 | Nucllei | フロントエンド。Open WebUI フォーク（technoplasm）/ `vendor/nucllei` submodule |
 | Ollama | ホスト実行。LiteLLM からだけ叩く |
-| vLLM (Qwen3.5-122B) | DGX Spark SM121 最適化 / `vendor/qwen35-spark` submodule |
 | vLLM (Qwen3.6-35B-A3B) | NVFP4 / 上流公式イメージ。35B MoE の VLM。実測 78.5 t/s で ollama の同モデルより +38%。[`docs/qwen36-vllm.md`](docs/qwen36-vllm.md) |
-| llama.cpp (Step-3.7-Flash) | 198B MoE VLM, GGUF IQ4_XS / `llamacpp/Dockerfile`。**vLLM の Qwen3.5 とは排他**（105GB + 100GB で 128GB に収まらない）。切り替えは [`docs/step37-llamacpp.md`](docs/step37-llamacpp.md) |
+| llama.cpp (Step-3.7-Flash) | 198B MoE VLM, GGUF IQ4_XS / `llamacpp/Dockerfile`。**他の大物とは排他**（128GB に同時に収まらない）。切り替えは [`docs/step37-llamacpp.md`](docs/step37-llamacpp.md) |
 
 **GPU を使うサービスは排他。** 起動しているものだけが `/v1/models` に出る。
 
@@ -64,13 +62,12 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 | `gemini-3.8-flash` | LiteLLM | Google AI Studio | 従量 (or $10/月クレジット) | thinking 既定 ON、`reasoning_effort: medium` |
 | `ollama/<name>` | LiteLLM | Ollama (ホスト実行) | — | ワイルドカード。`ollama pull` したものが自動で並ぶ |
 | `qwen3.6-35b` | **透過** | vLLM (NVFP4) | — | MoE VLM / vision / 78.5 tok/s |
-| `qwen3.5-122b-custom` | **透過** | カスタム vLLM (SM121) | — | 122B-A10B。下記の排他枠 |
 | `step-3.7-flash` | **透過** | llama.cpp (GGUF IQ4_XS) | — | 198B-A11B。下記の排他枠 |
 
 「透過」= prism-gw が上流へ素通しする経路。`max_model_len` とストリーム中の累積 usage が
 生きたまま届く（理由は[下記](#なぜ-prism-gw-があるのか2026-08-14-実測)）。
 
-**ローカルの大物 3 つ（`qwen3.5-122b-custom` / `step-3.7-flash` / `qwen3.6-35b`）は
+**ローカルの大物（`qwen3.8-flash-next` / `qwen3.8-27b` / `qwen3.6-35b` / `step-3.7-flash`）は
 128GB に同時に載らないので排他運用。** 起動していない上流は prism-gw が自動的に
 `/v1/models` から外すので、**一覧に出ているものが今動いているもの**。この README に
 「今どれが動いているか」は書かない（すぐ嘘になる）。上の curl で見ること。
@@ -84,7 +81,6 @@ GPU と統合メモリを丸ごと使うので、**ローカルモデルは常�
 |---|---|---|
 | **Qwen3.8-Flash-Next** (vLLM, 1 台) | `docker compose --profile heavy up -d vllm-qwen38-fn` | `docker compose stop vllm-qwen38-fn` |
 | Qwen3.8-27B (SGLang) | `docker compose --profile heavy up -d sglang-qwen38` | `docker compose stop sglang-qwen38` |
-| Qwen3.5-122B (vLLM) | `docker compose --profile heavy up -d vllm-qwen35` | `docker compose stop vllm-qwen35` |
 | Qwen3.6-35B (vLLM) | `docker compose --profile heavy up -d vllm-qwen36` | `docker compose stop vllm-qwen36` |
 | Step-3.7-Flash (llama.cpp) | `docker compose --profile heavy up -d llamacpp-step37` | `docker compose stop llamacpp-step37` |
 
@@ -99,26 +95,19 @@ util と cgroup 上限は固定値で、レシピの memwatch（メモリ見張�
 `network_mode: host` でホストの `:8888` に立ち、prism-gw はブリッジ GW 経由
 （`172.28.0.1:8888`）で見る（ollama と同じ形）。
 
-**大物 3 つはいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
+**大物はいずれも既定では起動しない**（2026-09-22 から compose の `heavy`
 profile）。`docker compose up -d` で上がるのは `prism-gw` / `litellm` / `nucllei`
 の 3 つだけ。この 3 つも `restart: "no"`（2026-09-28 から）で、ホスト再起動・docker
 daemon 再起動では上がらない。使うときに `docker compose up -d` する。使うときだけ明示的に上げる:
 
 ```bash
-docker compose --profile heavy up -d vllm-qwen35      # 122B (ロードに時間がかかる)
 docker compose --profile heavy up -d vllm-qwen36      # 35B-A3B VLM
 docker compose --profile heavy up -d llamacpp-step37  # 198B-A11B VLM
-docker compose stop vllm-qwen35                       # 停止
+docker compose stop vllm-qwen36                       # 停止
 ```
 
-3 つとも `restart: "no"`。`always` にすると profile で既定から外しても docker
+いずれも `restart: "no"`。`always` にすると profile で既定から外しても docker
 daemon 再起動で復活してしまい、「既定停止」にならない。
-
-> 122B のウェイトは統合メモリを ~100GB 占有する。Spark は GPU とシステムで
-> メモリを共有するので、**起動している間はホストの空きが 15% を切り**、fugu の
-> ダッシュボードが `Your agent is running low on memory.` を出し続ける
-> （実測: 空き 11.5GB / 124.6GB = 9.3%）。停止すると 95.3% に戻る。
-> fugu 自身は 760MB しか使っていないので、このバナーは fugu の問題ではない。
 
 **モデルの増減はまずここを疑う前に実物を見ること:**
 
@@ -218,17 +207,6 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama
 ```
 
 Docker ネットワーク (`chat_default`) のサブネットは `docker-compose.yml` で `172.28.0.0/16` に固定済み。
-
-## Qwen3.5-122B カスタム vLLM
-
-`qwen3.5-122b-custom` は SM121 向けに**自前ビルドした vLLM イメージ**（`ghcr.io/prism-hu/vllm-qwen35-v2`、
-GHCR から pull）で配信している。albond のフォーク（`vendor/qwen35-spark` submodule）をベースに
-INT4+FP8 hybrid / MTP-2 / FlashInfer で最適化（~52 tok/s）。
-
-**セットアップ・動作チェック・GHCR 配布・バージョン経緯・トラブルシュートは
-[docs/qwen35-vllm.md](docs/qwen35-vllm.md) に集約。**
-
-submodule 取得: `git submodule update --init --recursive`
 
 ## Models
 

@@ -187,7 +187,7 @@ model_list:
       model: ollama/*
       api_base: http://172.28.0.1:11434
 
-  # NOTE: OpenAI 互換の上流 (vLLM qwen3.5/3.6, llama.cpp step37, sglang kimi) は
+  # NOTE: OpenAI 互換の上流 (vLLM qwen3.6, llama.cpp step37, sglang kimi) は
   # ここには載せない。prism-gw が直接・無改変で中継する (gateway/config.yaml)。
   # LiteLLM を通すと /v1/models の `max_model_len` とストリーム中の累積 usage が
   # 消えるため。ここに戻すなら gateway/config.yaml の該当ルートを外すこと。
