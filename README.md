@@ -17,7 +17,9 @@ PRISM-HU の**共有推論スタック**。DGX Spark 1 台の上で複数のモ�
 
 ## 環境
 
-NVIDIA DGX Spark (128GB 統合メモリ)
+NVIDIA DGX Spark (128GB 統合メモリ) **2 台**: enda-spark（head、サービスもここ）と ASUS GX10 の enda-gx10
+（worker）。CX7 の port 0 同士を QSFP で直結し、`10.0.0.1` / `10.0.0.2`（`cx7` 接続、MTU 9000、
+RDMA 実測 109 Gb/s）。2 台構成のモデルは worker を ssh（`ken@10.0.0.2`）で起動する。
 
 ## ドキュメント
 
@@ -29,6 +31,7 @@ NVIDIA DGX Spark (128GB 統合メモリ)
 | [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next と TP=2（結論: 1 台で回すべき） |
 | [docs/qwen36-vllm.md](docs/qwen36-vllm.md) | Qwen3.6-35B-A3B (NVFP4) の計測と、不採用にした選択肢 |
 | [docs/step37-llamacpp.md](docs/step37-llamacpp.md) | Step-3.7-Flash (llama.cpp) の切り替えとチューニング |
+| [evals/README.md](evals/README.md) | ローカルモデル比較用の 23 問ベンチ。結果と横並び比較は `evals/results/`（2026-10-07 の全モデル比較は `compare-20261007-0521.md`） |
 
 ## スタック
 
@@ -63,12 +66,16 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 | `ollama/<name>` | LiteLLM | Ollama (ホスト実行) | — | ワイルドカード。`ollama pull` したものが自動で並ぶ |
 | `qwen3.6-35b` | **透過** | vLLM (NVFP4) | — | MoE VLM / vision / 78.5 tok/s |
 | `step-3.7-flash` | **透過** | llama.cpp (GGUF IQ4_XS) | — | 198B-A11B。下記の排他枠 |
+| `glm-5.3-flash` | **透過** | TensorFold (EXL3 4bpw), **2 台** | — | VLM（画像・動画）。prism-gw が `reasoning_effort: low` を既定で補う |
+| `deepseek-v4-flash` | **透過** | vLLM DSpark, **2 台** | — | Vision-Exp（画像）。1M コンテキスト |
+| `qwen3.8-27b-tp2` | **透過** | SGLang, **2 台** | — | 27B を TP=2 で。1 台版と同じ重み |
 
 「透過」= prism-gw が上流へ素通しする経路。`max_model_len` とストリーム中の累積 usage が
 生きたまま届く（理由は[下記](#なぜ-prism-gw-があるのか2026-08-14-実測)）。
 
-**ローカルの大物（`qwen3.8-flash-next` / `qwen3.8-27b` / `qwen3.6-35b` / `step-3.7-flash`）は
-128GB に同時に載らないので排他運用。** 起動していない上流は prism-gw が自動的に
+**ローカルの大物（`qwen3.8-flash-next` / `qwen3.8-27b` / `qwen3.6-35b` / `step-3.7-flash` と、
+2 台構成の `glm-5.3-flash` / `deepseek-v4-flash` / `qwen3.8-27b-tp2`）は同時に載らないので排他運用。**
+2 台構成と Flash-Next はどれも `172.28.0.1:8888` で待ち受けるので、ポートの上でも排他。 起動していない上流は prism-gw が自動的に
 `/v1/models` から外すので、**一覧に出ているものが今動いているもの**。この README に
 「今どれが動いているか」は書かない（すぐ嘘になる）。上の curl で見ること。
 
@@ -83,6 +90,20 @@ GPU と統合メモリを丸ごと使うので、**ローカルモデルは常�
 | Qwen3.8-27B (SGLang) | `docker compose --profile heavy up -d sglang-qwen38` | `docker compose stop sglang-qwen38` |
 | Qwen3.6-35B (vLLM) | `docker compose --profile heavy up -d vllm-qwen36` | `docker compose stop vllm-qwen36` |
 | Step-3.7-Flash (llama.cpp) | `docker compose --profile heavy up -d llamacpp-step37` | `docker compose stop llamacpp-step37` |
+| **GLM-5.3-Flash** (TensorFold, 2 台) | `glm53-flash/start.sh` | `glm53-flash/stop.sh` |
+| DeepSeek-V4-Flash Vision-Exp (vLLM, 2 台) | `deepseek-v4-flash/start.sh` | `deepseek-v4-flash/stop.sh` |
+| Qwen3.8-Flash-Next (vLLM, 2 台・nvidia 版の重み) | `qwen38-flash-next-dual/start.sh --launch` | `qwen38-flash-next-dual/stop.sh` |
+| Qwen3.8-27B (SGLang, 2 台) | `qwen38-27b-tp2/start.sh` | `qwen38-27b-tp2/stop.sh` |
+
+2 台構成の 4 つは、どれもリポジトリ直下のディレクトリにある起動ラッパー経由で動かす（レシピの
+submodule は無改変、設定と理由は各ディレクトリの README.md）。2026-10-07 の比較（`evals/`）では
+**GLM-5.3-Flash（思考 low）が速さ・安定・品質のバランスで最良**（23 問 237 s、打ち切り 0、tool 全問正解）。
+正確さ（日本語の語彙・医療知識）が一番なのは DeepSeek だが 5 倍遅い。2 台構成の Flash-Next は
+nvidia 版の軽い量子化で 1 台版より品質がはっきり上がった。
+
+**GB10 のページキャッシュに注意。** 他のモデルのファイルが数十 GiB キャッシュに載っていると、
+DeepSeek の worker がロード中に固まった（`deepseek-v4-flash/README.md`）。起動ラッパーは先に
+両ノードでモデルのキャッシュを捨てる（`deepseek-v4-flash/drop-model-cache.py`、sudo 不要）。
 
 Flash-Next の中身は `vendor/qwen38-flash-next` の
 submodule（[MiaAI-Lab のレシピ](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark)）。
