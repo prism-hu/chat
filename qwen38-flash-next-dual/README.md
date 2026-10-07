@@ -56,10 +56,11 @@ SCRIPT_DIR・`--host`・起動待ちの `/health` の URL の 3 か所だけを 
 
 ## 重みとイメージ
 
-spark にもまだ無い（2026-10-07 時点で `refs/main` だけある）。先に head へ:
+2026-10-07 に両ノードへ配置済み（124 GiB、sha256 照合済み）。入れ直すときは、大学の回線だと `hf download` は
+大きいファイルを取り切れない（失敗のたびにやり直す）ので、再開できる `scripts/hf-resumable.py` を使う:
 
 ```bash
-hf download nvidia/Qwen3.8-Flash-Next-NVFP4 --revision fc694b54fb0174e0913e6adf86691ef85a4ead47
+python3 scripts/hf-resumable.py nvidia/Qwen3.8-Flash-Next-NVFP4 fc694b54fb0174e0913e6adf86691ef85a4ead47
 ```
 
 gx10 に要るもの: `~/.cache/huggingface/hub/models--nvidia--Qwen3.8-Flash-Next-NVFP4/`

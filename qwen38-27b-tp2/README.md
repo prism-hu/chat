@@ -48,7 +48,7 @@ TP=2 で重みが半分（~11 GB/ノード）になっても総量は同じで�
 ~21 GB（負荷時 ~17 GB）の見込みで、technoplasm/vision の ~8 GiB を足しても余裕がある。それでも KV プールは
 1 台構成（0.80、~78 万トークン）より大きい。
 
-## gx10 に要るもの（2026-10-07 時点: どちらも無い）
+## gx10 に要るもの（2026-10-07 にコピー済み）
 
 - `/home/ken/models/qwen38-27b-nvfp4/`（22.1 GiB）と `/home/ken/models/qwen38-27b-dflash2-draft/`（3.6 GiB）
   （HF キャッシュではなく平置きのディレクトリ。compose が `MODELS_DIR=/home/ken/models` をマウントしているのと同じ形）

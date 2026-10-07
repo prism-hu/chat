@@ -375,7 +375,8 @@ services:
   #   - パッチ済みファイル (files/*_patched.py, gitignore) と PLE packed table は
   #     start.sh が作る生成物。submodule を更新したら先に
   #       cd vendor/qwen38-flash-next && ./start.sh --no-launch
-  # 起動前に sysctl (files/sysctl-spark3.conf) が入っていること。再起動で消える。
+  # レシピ同梱の sysctl (files/sysctl-spark3.conf) は 2026-10-07 から入れない (ホストは既定値。
+  # 予算は上の固定値で残す。docs/two-sparks-2026-10.md)。
   # ホストの :8888 に立ち、prism-gw は 172.28.0.1:8888 で見る (gateway/config.yaml)。
   # **他の大物 (vllm-qwen36 等) とも DeepSeek (vendor/deepseek-v4-flash-dspark) とも排他。**
   vllm-qwen38-fn:

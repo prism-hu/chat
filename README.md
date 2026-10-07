@@ -28,7 +28,8 @@ RDMA 実測 109 Gb/s）。2 台構成のモデルは worker を ssh（`ken@10.0.
 | [docs/gateway.md](docs/gateway.md) | prism-gw の設計と、LiteLLM/Bifrost を使わなかった理由の実測 |
 | [docs/qwen3.8-27b-serving.md](docs/qwen3.8-27b-serving.md) | Qwen3.8-27B を GB10 で serve する調査（ランタイム比較・チェックポイント選定・sm_121 のハマりどころ） |
 | [docs/dgx-spark-tp2.md](docs/dgx-spark-tp2.md) | Spark 2 台 / TP=2 に増設する場合 |
-| [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next と TP=2（結論: 1 台で回すべき） |
+| [docs/two-sparks-2026-10.md](docs/two-sparks-2026-10.md) | 2 台構成の実機記録（CX7 配線・事故と原因・メモリの値・2026-10-07 の比較・未解決） |
+| [docs/qwen3.8-flash-next-tp2.md](docs/qwen3.8-flash-next-tp2.md) | Qwen3.8-Flash-Next と TP=2（当初の結論は「1 台で回すべき」。2026-10-07 の追記: nvidia 版の重みの 2 台構成は速さ ×1.15 だが品質がはっきり上） |
 | [docs/qwen36-vllm.md](docs/qwen36-vllm.md) | Qwen3.6-35B-A3B (NVFP4) の計測と、不採用にした選択肢 |
 | [docs/step37-llamacpp.md](docs/step37-llamacpp.md) | Step-3.7-Flash (llama.cpp) の切り替えとチューニング |
 | [evals/README.md](evals/README.md) | ローカルモデル比較用の 23 問ベンチ。結果と横並び比較は `evals/results/`（2026-10-07 の全モデル比較は `compare-20261007-0521.md`） |
@@ -112,7 +113,7 @@ submodule（[MiaAI-Lab のレシピ](https://github.com/MiaAI-Lab/Qwen3.8-Flash-
 （2026-10-06）、**パッチ済みファイルと PLE テーブルは `start.sh` の生成物**。submodule を
 更新したら先に `cd vendor/qwen38-flash-next && ./start.sh --no-launch` を流す。
 util と cgroup 上限は固定値で、レシピの memwatch（メモリ見張り）は付かない。
-起動前に `sudo sysctl -p vendor/qwen38-flash-next/files/sysctl-spark3.conf`（再起動で消える）。
+レシピ同梱の sysctl（`files/sysctl-spark3.conf`）は**入れない**（2026-10-07 にホスト全体で既定値に戻した。予備が MemAvailable を約 9 GiB 削り、2 台構成の起動を妨げたため。経緯は `docs/two-sparks-2026-10.md`）。
 `network_mode: host` でホストの `:8888` に立ち、prism-gw はブリッジ GW 経由
 （`172.28.0.1:8888`）で見る（ollama と同じ形）。
 
