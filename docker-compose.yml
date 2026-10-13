@@ -91,6 +91,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # gemini-* (Google AI Studio) のみが使う。同上、必須にはしない。
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # openrouter/* のみが使う。同上、必須にはしない。
+      - OPEN_ROUTER_API_KEY=${OPEN_ROUTER_API_KEY:-}
       # chatgpt/* (ChatGPT サブスク) が使う。API キーではなく OAuth トークンで、
       # litellm が device code flow を踏んで下のマウント先に auth.json を書く。
       # 既定は ~/.config/litellm/chatgpt で、コンテナ再作成のたびに消えるため移す。

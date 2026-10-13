@@ -64,6 +64,7 @@ prism-gw と LiteLLM が差し替えるのでクライアントには出ない�
 | `gpt-5.6-luna` / `-terra` / `-sol` | LiteLLM | OpenAI 公式 API | **従量** | 下位 / 中位 / フラッグシップ |
 | `codex/gpt-5.6-luna` / `-terra` / `-sol` / `codex/gpt-5.5` | LiteLLM | ChatGPT backend | **サブスク枠** | 中身は上と同じモデルだが課金先が違う。**`stream: true` 必須** |
 | `gemini-3.8-flash` | LiteLLM | Google AI Studio | 従量 (or $10/月クレジット) | thinking 既定 ON、`reasoning_effort: medium` |
+| `openrouter/mimo-v2.6-pro` / `openrouter/deepseek-v4.1-flash` / `openrouter/kimi-k2.6` | LiteLLM | OpenRouter（Xiaomi / DeepSeek / Moonshot 公式に固定） | 従量 | `OPEN_ROUTER_API_KEY`。フォールバックしない |
 | `ollama/<name>` | LiteLLM | Ollama (ホスト実行) | — | ワイルドカード。`ollama pull` したものが自動で並ぶ |
 | `qwen3.6-35b` | **透過** | vLLM (NVFP4) | — | MoE VLM / vision / 78.5 tok/s |
 | `step-3.7-flash` | **透過** | llama.cpp (GGUF IQ4_XS) | — | 198B-A11B。下記の排他枠 |

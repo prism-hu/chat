@@ -177,6 +177,43 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       reasoning_effort: medium
 
+  # --- OpenRouter ---
+  # キーは ~/chat/.env の OPEN_ROUTER_API_KEY。未設定でも起動はするが 401 になる。
+  # **上流プロバイダを公式 1 本に固定し、フォールバックさせない** (extra_body.provider)。
+  # OpenRouter は既定だと価格順に振るので、同じモデル ID でも fp4 の格安ホストに
+  # 落ちて品質がぶれる (deepseek-v4.1-flash は 2026-10-13 時点で 30 社弱、半分が fp4)。
+  # 公式が落ちているときはエラーで返る — 黙って別物になるよりよい。
+  # 価格 ($/1M tokens, in/out、2026-10-13 の /api/v1/models/<id>/endpoints):
+  #   mimo-v2.6-pro       Xiaomi   0.435 / 0.87   ctx 1,048,576
+  #   deepseek-v4.1-flash DeepSeek 0.15  / 0.60   ctx 1,048,576
+  #   kimi-k2.6           Moonshot 0.95  / 4.00   ctx 262,144 (公開ウェイトが INT4 QAT。公式も int4)
+  - model_name: openrouter/mimo-v2.6-pro
+    litellm_params:
+      model: openrouter/xiaomi/mimo-v2.6-pro
+      api_key: os.environ/OPEN_ROUTER_API_KEY
+      extra_body:
+        provider: {order: [Xiaomi], allow_fallbacks: false}
+    model_info:
+      max_input_tokens: 1048576
+
+  - model_name: openrouter/deepseek-v4.1-flash
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4.1-flash
+      api_key: os.environ/OPEN_ROUTER_API_KEY
+      extra_body:
+        provider: {order: [DeepSeek], allow_fallbacks: false}
+    model_info:
+      max_input_tokens: 1048576
+
+  - model_name: openrouter/kimi-k2.6
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2.6
+      api_key: os.environ/OPEN_ROUTER_API_KEY
+      extra_body:
+        provider: {order: [Moonshot AI], allow_fallbacks: false}
+    model_info:
+      max_input_tokens: 262144
+
   # --- Ollama (host, via the docker bridge gateway) ---
   # Wildcard route: LiteLLM matches `ollama/<name>` at request time (PatternMatchRouter)
   # and lists the host's ACTUAL models in /v1/models by calling Ollama's /api/tags
