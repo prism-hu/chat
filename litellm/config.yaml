@@ -67,14 +67,23 @@ model_list:
   #   litellm_params.model `chatgpt/...` **プロバイダ選択子。変更不可。**
   #                                    litellm はこの前置きで chatgpt プロバイダ
   #                                    (OAuth 認証) に振り分ける。
-  #   `chatgpt/responses/...`             の `responses/` は **必須** (2026-10-06)。
-  #                                    無いと litellm は chat/completions か
-  #                                    Responses かを起動時に GitHub から取る
-  #                                    モデル表で決める。ホスト再起動直後は DNS 前に
-  #                                    取得が失敗して同梱の古い表に落ち、そこに
-  #                                    gpt-5.x が無いため存在しない
+  #   `model_info: {mode: responses}`  **必須** (2026-10-09)。litellm は
+  #                                    chat/completions か Responses かをモデル表の
+  #                                    mode で決める。表は起動時に GitHub から取るが、
+  #                                    ホスト再起動直後は DNS 前に取得が失敗して同梱の
+  #                                    古い表に落ち、そこに gpt-5.x が無いため存在しない
   #                                    /backend-api/codex/chat/completions を叩き、
   #                                    Cloudflare のチャレンジ HTML (403) が返る。
+  #                                    model_info の mode は router が
+  #                                    `chatgpt/<model>` の表に直接登録するので、
+  #                                    取得の成否に関係なく Responses に固定される。
+  #   **`chatgpt/responses/<model>` は使わない。** 前置き `responses/` は
+  #   chat/completions の経路では剥がされるが、/v1/responses (Responses API 直) の
+  #   経路では剥がされずに backend へ渡り、
+  #     "The 'responses/gpt-5.6-luna' model is not supported when using Codex
+  #      with a ChatGPT account." (400)
+  #   になる (2026-10-06〜09 に fugu の cron が全滅した原因。Hermes の cron は
+  #   /v1/responses で呼ぶ)。
   #
   # `codex/` は「Codex CLI の OAuth 枠から出ている」という意味で、**Codex モデル
   # という意味ではない**。皮肉なことに本物の codex-* は下記のとおり全部使えない。
@@ -129,19 +138,27 @@ model_list:
   #     グレー。アカウント停止のリスクは自分持ちで使うこと。
   - model_name: codex/gpt-5.6-sol
     litellm_params:
-      model: chatgpt/responses/gpt-5.6-sol
+      model: chatgpt/gpt-5.6-sol
+    model_info:
+      mode: responses
 
   - model_name: codex/gpt-5.6-terra
     litellm_params:
-      model: chatgpt/responses/gpt-5.6-terra
+      model: chatgpt/gpt-5.6-terra
+    model_info:
+      mode: responses
 
   - model_name: codex/gpt-5.6-luna
     litellm_params:
-      model: chatgpt/responses/gpt-5.6-luna
+      model: chatgpt/gpt-5.6-luna
+    model_info:
+      mode: responses
 
   - model_name: codex/gpt-5.5
     litellm_params:
-      model: chatgpt/responses/gpt-5.5
+      model: chatgpt/gpt-5.5
+    model_info:
+      mode: responses
 
   # --- Gemini (Google AI Studio の Gemini Developer API 直) ---
   # キーは ~/chat/.env の GEMINI_API_KEY (https://aistudio.google.com/apikey)。
